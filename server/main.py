@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from middlewares.exception_handlers import catch_exceptions
 
 
 app = FastAPI()
@@ -16,6 +16,6 @@ app.add_middleware(
 
 
 # Middlware
-
+app.middleware("http")(catch_exceptions)
 
 # Routers
