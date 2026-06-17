@@ -27,9 +27,19 @@ const qaResponseSchema = z.object({
     .default([])
 });
 
+const LOCAL_DEV_BACKEND_API_URL = "http://127.0.0.1:8000";
+
 export function getBackendApiUrl() {
   const value = process.env.BACKEND_API_URL?.trim();
-  return value && value.length > 0 ? value : null;
+  if (value && value.length > 0) {
+    return value;
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    return LOCAL_DEV_BACKEND_API_URL;
+  }
+
+  return null;
 }
 
 export function getInternalApiToken() {

@@ -1,0 +1,8 @@
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3001
+- PID:          43428
+- Dir:          C:\Users\jathi\Documents\AuthLens\client
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 43428 /F to stop it.

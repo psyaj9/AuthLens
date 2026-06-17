@@ -1,8 +1,8 @@
 # Fix client API proxy 503/502
 
-- [ ] Inspect client proxy routes and backend health/upload handlers.
-- [ ] Reproduce the reported `/api/health` 503 and `/api/upload` 502 locally.
-- [ ] Apply the minimal root-cause fix.
+- [x] Inspect client proxy routes and backend health/upload handlers.
+- [x] Reproduce the reported `/api/health` 503 and `/api/upload` 502 locally.
+- [x] Apply the minimal root-cause fix.
 - [ ] Verify focused client/backend tests and endpoint behavior.
 
 ## Review

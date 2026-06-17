@@ -1,0 +1,5 @@
+INFO:     Started server process [48552]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+Uploading DIABETES.pdf to Pinecone:   0%|          | 0/20 [00:00<?, ?it/s]Uploading DIABETES.pdf to Pinecone: 100%|##########| 20/20 [00:00<00:00, 21.95it/s]Uploading DIABETES.pdf to Pinecone: 100%|##########| 20/20 [00:00<00:00, 21.93it/s]

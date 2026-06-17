@@ -1,16 +1,35 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildBackendHeaders,
   buildBackendUrl,
+  getBackendApiUrl,
   normalizeBackendError,
   parseQaResponse
 } from "./backend-proxy";
 
 describe("backend proxy helpers", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("builds backend URLs from server-only configuration without double slashes", () => {
     expect(buildBackendUrl("https://api.example.test/", "/api/queries/")).toBe(
       "https://api.example.test/api/queries/"
     );
+  });
+
+  it("defaults to the local FastAPI backend during development", () => {
+    vi.stubEnv("BACKEND_API_URL", "");
+    vi.stubEnv("NODE_ENV", "development");
+
+    expect(getBackendApiUrl()).toBe("http://127.0.0.1:8000");
+  });
+
+  it("requires explicit backend configuration outside development", () => {
+    vi.stubEnv("BACKEND_API_URL", "");
+    vi.stubEnv("NODE_ENV", "test");
+
+    expect(getBackendApiUrl()).toBeNull();
   });
 
   it("adds the internal token only when configured", () => {
