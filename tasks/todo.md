@@ -82,3 +82,35 @@
 - Closed existing logger handlers before reconfiguration to avoid duplicate handlers and file-handle leaks during imports.
 - Added regression coverage for the query handler and console logger setup.
 - Verified with `.venv\Scripts\python.exe -m unittest tests.test_query_handler tests.test_logger tests.test_queries_route tests.test_app_startup`.
+
+# Fix RetrievalQA prompt input mismatch
+
+- [x] Confirm root cause from logs and LangChain RetrievalQA prompt contract.
+- [x] Add regression coverage for prompt variables and chain-error HTTP status.
+- [x] Change the custom QA prompt to use `question` inside the document-combine step.
+- [x] Stop treating chain exceptions as successful query responses.
+- [x] Verify focused query tests.
+
+## Review
+
+- Root cause: `RetrievalQA` is invoked with `{"query": ...}`, but the internal `stuff` prompt receives the question as `question`; the custom prompt incorrectly required `{query}`.
+- Updated the QA prompt to use `input_variables=["context", "question"]` and `{question}` in the template.
+- Updated `handle_query_chain` so chain exceptions are logged and re-raised instead of returned as a normal `{"error": ...}` payload.
+- Added regression coverage for the prompt variables, handler exception propagation, and route-level `500` behavior.
+- Verified with `.venv\Scripts\python.exe -m unittest tests.test_llm tests.test_query_handler tests.test_queries_route tests.test_app_startup`.
+
+# Replace decommissioned Groq chat model
+
+- [x] Confirm current Groq replacement model from official docs.
+- [x] Add regression coverage for default and env-configurable Groq chat model.
+- [x] Replace the decommissioned hardcoded model.
+- [x] Verify focused LLM tests.
+
+## Review
+
+- Replaced the decommissioned `llama3-70b-8192` hardcode with `llama-3.1-8b-instant`.
+- Added `GROQ_MODEL` support so `.env` can override the model without code changes.
+- Confirmed Groq's official deprecation docs recommend `llama-3.3-70b-versatile` as the direct 70B replacement; kept the default on the lighter instant model for local/free-tier testing.
+- Added tests for default model selection and env override.
+- Verified with `.venv\Scripts\python.exe -m unittest tests.test_llm tests.test_query_handler tests.test_queries_route tests.test_app_startup`.
+- Verified a live Groq smoke call with `llama-3.1-8b-instant` returns successfully.

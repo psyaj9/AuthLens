@@ -13,4 +13,4 @@ def handle_query_chain(chain, user_query: str):
     
     except Exception as e:
         logger.error(f"Error handling query: {e}")
-        return {"error": str(e)}
+        raise

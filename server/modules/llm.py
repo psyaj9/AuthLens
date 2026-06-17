@@ -9,18 +9,19 @@ load_dotenv()
 
 groq_api_key = os.getenv("GROQ_API_KEY")
 GROQ_API_KEY: SecretStr | None = SecretStr(groq_api_key) if groq_api_key else None
+DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
 
 
 def get_llm(retriever):
     llm = ChatGroq(
         api_key=GROQ_API_KEY,
-        model="llama3-70b-8192",
+        model=os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL),
         temperature=0.2,
         max_tokens=2000,
     )
     
     prompt = PromptTemplate(
-        input_variables=["context", "query"],
+        input_variables=["context", "question"],
         template="""
         
         You are a medical assistant that helps understand medical questions and documents. 
@@ -33,7 +34,7 @@ def get_llm(retriever):
         {context}
 
         **User Query:**
-        {query}
+        {question}
 
         ---
 

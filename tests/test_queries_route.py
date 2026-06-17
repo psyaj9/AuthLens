@@ -66,3 +66,35 @@ class QueryRouteTests(unittest.TestCase):
             response.json(),
             {"answer": "Diabetes is a chronic condition."},
         )
+
+    def test_queries_returns_500_when_chain_processing_fails(self):
+        main = importlib.import_module("main")
+        queries_module = importlib.import_module("routes.queries")
+        client = TestClient(main.app)
+
+        index = MagicMock()
+        index.query.return_value = SimpleNamespace(matches=[])
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.1, 0.2, 0.3]
+
+        with patch.object(
+            queries_module, "get_pinecone_index", return_value=(index, "auth-index")
+        ), patch.object(
+            queries_module, "get_embeddings", return_value=embeddings
+        ), patch.object(
+            queries_module, "get_llm", return_value=object()
+        ), patch.object(
+            queries_module,
+            "handle_query_chain",
+            side_effect=ValueError("Missing some input keys: {'query'}"),
+        ):
+            response = client.post(
+                "/api/queries/",
+                data={"user_query": "what is diabetes?"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"error": "Missing some input keys: {'query'}"},
+        )

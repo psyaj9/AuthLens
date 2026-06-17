@@ -57,6 +57,20 @@ class QueryHandlerTests(unittest.TestCase):
             logs.output[1],
         )
 
+    def test_handle_query_chain_raises_chain_errors_after_logging(self):
+        class Chain:
+            def invoke(self, payload):
+                raise ValueError("Missing some input keys: {'query'}")
+
+        with self.assertLogs(self.query_handler.logger, level="ERROR") as logs:
+            with self.assertRaisesRegex(ValueError, "Missing some input keys"):
+                self.query_handler.handle_query_chain(
+                    Chain(),
+                    "what is diabetes?",
+                )
+
+        self.assertIn("Error handling query: Missing some input keys", logs.output[0])
+
 
 if __name__ == "__main__":
     unittest.main()
