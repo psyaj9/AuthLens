@@ -1,4 +1,26 @@
 import { z } from "zod";
+import {
+  authResponseSchema,
+  caseListSchema,
+  caseSchema,
+  citationCheckSchema,
+  criteriaListSchema,
+  documentListSchema,
+  documentSchema,
+  draftListSchema,
+  draftSchema,
+  evidenceListSchema,
+  readinessReportSchema,
+  userProfileSchema,
+  type CaseDocument,
+  type CaseSummary,
+  type CitationCheck,
+  type Criterion,
+  type DraftLetter,
+  type EvidenceMatch,
+  type ReadinessReport,
+  type UserProfile
+} from "./priorauth-schemas";
 
 const qaResponseSchema = z.object({
   response: z.string(),
@@ -9,6 +31,7 @@ const uploadResponseSchema = z.record(z.string(), z.unknown());
 
 export type QaClientResponse = z.infer<typeof qaResponseSchema>;
 export type UploadClientResponse = z.infer<typeof uploadResponseSchema>;
+export type LoginResponse = z.infer<typeof authResponseSchema>;
 
 export class AuthLensApiError extends Error {
   status: number;
@@ -68,4 +91,135 @@ export async function uploadDocuments(
   });
 
   return parseLocalRouteResponse(response, uploadResponseSchema);
+}
+
+export async function loginDemoUser(
+  email: string,
+  password: string
+): Promise<LoginResponse> {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  return parseLocalRouteResponse(response, authResponseSchema);
+}
+
+export async function logoutDemoUser(): Promise<void> {
+  await fetch("/api/auth/logout", { method: "POST" });
+}
+
+export async function getCurrentUser(): Promise<UserProfile> {
+  const response = await fetch("/api/auth/me", { cache: "no-store" });
+  return parseLocalRouteResponse(response, userProfileSchema);
+}
+
+export async function listCases(): Promise<CaseSummary[]> {
+  const response = await fetch("/api/cases", { cache: "no-store" });
+  const payload = await parseLocalRouteResponse(response, caseListSchema);
+  return payload.cases;
+}
+
+export async function createCase(payload: {
+  patient_label: string;
+  payer_name: string;
+  specialty: string;
+  requested_service: string;
+  service_code?: string;
+  case_type: "prior_auth";
+}): Promise<CaseSummary> {
+  const response = await fetch("/api/cases", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return parseLocalRouteResponse(response, caseSchema);
+}
+
+export async function listCaseDocuments(caseId: string): Promise<CaseDocument[]> {
+  const response = await fetch(`/api/cases/${caseId}/documents`, {
+    cache: "no-store"
+  });
+  const payload = await parseLocalRouteResponse(response, documentListSchema);
+  return payload.documents;
+}
+
+export async function uploadCaseDocument(
+  caseId: string,
+  documentType: string,
+  file: File
+): Promise<CaseDocument> {
+  const body = new FormData();
+  body.set("document_type", documentType);
+  body.set("file", file);
+  const response = await fetch(`/api/cases/${caseId}/documents`, {
+    method: "POST",
+    body
+  });
+  return parseLocalRouteResponse(response, documentSchema);
+}
+
+export async function extractCriteria(caseId: string): Promise<Criterion[]> {
+  const response = await fetch(`/api/cases/${caseId}/criteria/extract`, {
+    method: "POST"
+  });
+  const payload = await parseLocalRouteResponse(response, criteriaListSchema);
+  return payload.criteria;
+}
+
+export async function listCriteria(caseId: string): Promise<Criterion[]> {
+  const response = await fetch(`/api/cases/${caseId}/criteria`, {
+    cache: "no-store"
+  });
+  const payload = await parseLocalRouteResponse(response, criteriaListSchema);
+  return payload.criteria;
+}
+
+export async function matchEvidence(caseId: string): Promise<EvidenceMatch[]> {
+  const response = await fetch(`/api/cases/${caseId}/evidence/match`, {
+    method: "POST"
+  });
+  const payload = await parseLocalRouteResponse(response, evidenceListSchema);
+  return payload.matches;
+}
+
+export async function listEvidence(caseId: string): Promise<EvidenceMatch[]> {
+  const response = await fetch(`/api/cases/${caseId}/evidence`, {
+    cache: "no-store"
+  });
+  const payload = await parseLocalRouteResponse(response, evidenceListSchema);
+  return payload.matches;
+}
+
+export async function generateReadinessReport(
+  caseId: string
+): Promise<ReadinessReport> {
+  const response = await fetch(`/api/cases/${caseId}/reports/readiness`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, readinessReportSchema);
+}
+
+export async function createPriorAuthDraft(caseId: string): Promise<DraftLetter> {
+  const response = await fetch(`/api/cases/${caseId}/drafts/prior-auth`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, draftSchema);
+}
+
+export async function listDrafts(caseId: string): Promise<DraftLetter[]> {
+  const response = await fetch(`/api/cases/${caseId}/drafts`, {
+    cache: "no-store"
+  });
+  const payload = await parseLocalRouteResponse(response, draftListSchema);
+  return payload.drafts;
+}
+
+export async function verifyDraftCitations(
+  draftId: string
+): Promise<CitationCheck> {
+  const response = await fetch(`/api/drafts/${draftId}/verify-citations`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, citationCheckSchema);
 }
