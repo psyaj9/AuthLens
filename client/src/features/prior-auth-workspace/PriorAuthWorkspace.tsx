@@ -18,6 +18,7 @@ import {
   createCase,
   createPriorAuthDraft,
   extractCriteria,
+  forgotPassword,
   generateReadinessReport,
   getCurrentUser,
   listCaseDocuments,
@@ -25,9 +26,11 @@ import {
   listCriteria,
   listDrafts,
   listEvidence,
-  loginDemoUser,
-  logoutDemoUser,
+  loginUser,
+  logoutUser,
   matchEvidence,
+  registerUser,
+  resetPassword,
   uploadCaseDocument,
   verifyDraftCitations
 } from "@/lib/api/client";
@@ -43,6 +46,7 @@ import type {
 } from "@/lib/api/priorauth-schemas";
 
 type AsyncStatus = "idle" | "loading" | "success" | "error";
+type AuthMode = "login" | "register" | "forgot" | "reset";
 type WorkflowTab = "documents" | "criteria" | "evidence" | "readiness" | "draft";
 
 const documentTypes = [
@@ -118,61 +122,148 @@ function TabButton({
 
 function LoginPanel({
   message,
+  onForgotPassword,
   onLogin,
+  onRegister,
+  onResetPassword,
   status
 }: {
   message?: string;
+  onForgotPassword: (email: string) => void;
   onLogin: (email: string, password: string) => void;
+  onRegister: (payload: { email: string; password: string; name: string; organization_name: string }) => void;
+  onResetPassword: (resetToken: string, password: string) => void;
   status: AsyncStatus;
 }) {
-  const [email, setEmail] = useState("coordinator@demo.authlens.test");
-  const [password, setPassword] = useState("demo-password");
+  const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [name, setName] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [password, setPassword] = useState("");
+  const [resetToken, setResetToken] = useState("");
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onLogin(email, password);
+    if (mode === "register") {
+      onRegister({ email, password, name, organization_name: organizationName });
+    } else if (mode === "forgot") {
+      onForgotPassword(email);
+    } else if (mode === "reset") {
+      onResetPassword(resetToken, password);
+    } else {
+      onLogin(email, password);
+    }
   }
+
+  const title = mode === "register" ? "Create account" : mode === "forgot" ? "Forgot password" : mode === "reset" ? "Reset password" : "Sign in";
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-8">
       <Panel className="w-full max-w-md" labelledBy="login-heading">
         <PanelHeader
-          action={<StatusPill tone={status === "error" ? "error" : "idle"}>Demo</StatusPill>}
+          action={<StatusPill tone={status === "error" ? "error" : "idle"}>Account</StatusPill>}
           id="login-heading"
           title="PriorAuth Evidence Copilot"
         >
           Synthetic or de-identified documents only.
         </PanelHeader>
         <form className="flex flex-col gap-4 p-5" onSubmit={submit}>
-          <label className="flex flex-col gap-2 text-sm font-semibold">
-            Email
-            <input
-              autoComplete="email"
-              className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
-              onChange={(event) => setEmail(event.target.value)}
-              type="email"
-              value={email}
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm font-semibold">
-            Password
-            <input
-              autoComplete="current-password"
-              className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              value={password}
-            />
-          </label>
+          {mode === "register" ? (
+            <>
+              <label className="flex flex-col gap-2 text-sm font-semibold">
+                Name
+                <input
+                  autoComplete="name"
+                  className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+                  onChange={(event) => setName(event.target.value)}
+                  type="text"
+                  value={name}
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-sm font-semibold">
+                Organization
+                <input
+                  autoComplete="organization"
+                  className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+                  onChange={(event) => setOrganizationName(event.target.value)}
+                  type="text"
+                  value={organizationName}
+                />
+              </label>
+            </>
+          ) : null}
+          {mode === "reset" ? (
+            <label className="flex flex-col gap-2 text-sm font-semibold">
+              Reset token
+              <input
+                autoComplete="one-time-code"
+                className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+                onChange={(event) => setResetToken(event.target.value)}
+                type="text"
+                value={resetToken}
+              />
+            </label>
+          ) : (
+            <label className="flex flex-col gap-2 text-sm font-semibold">
+              Email
+              <input
+                autoComplete="email"
+                className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                value={email}
+              />
+            </label>
+          )}
+          {mode !== "forgot" ? (
+            <label className="flex flex-col gap-2 text-sm font-semibold">
+              Password
+              <input
+                autoComplete={mode === "register" ? "new-password" : "current-password"}
+                className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                value={password}
+              />
+            </label>
+          ) : null}
           {message ? (
-            <p className="rounded-md border border-[#f0b8b3] bg-[#fff1f0] px-3 py-2 text-sm text-[var(--danger)]" role="alert">
+            <p
+              className={`rounded-md border px-3 py-2 text-sm ${
+                status === "error"
+                  ? "border-[#f0b8b3] bg-[#fff1f0] text-[var(--danger)]"
+                  : "border-[#bfe3ce] bg-[#f0faf4] text-[var(--success)]"
+              }`}
+              role={status === "error" ? "alert" : "status"}
+            >
               {message}
             </p>
           ) : null}
           <Button isLoading={status === "loading"} type="submit">
             <ShieldCheck aria-hidden className="h-4 w-4" />
-            Sign in
+            {title}
           </Button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {mode === "login" ? (
+              <>
+                <Button onClick={() => setMode("register")} type="button" variant="secondary">
+                  Create account
+                </Button>
+                <Button onClick={() => setMode("forgot")} type="button" variant="secondary">
+                  Forgot password
+                </Button>
+              </>
+            ) : (
+              <Button onClick={() => setMode("login")} type="button" variant="secondary">
+                Sign in
+              </Button>
+            )}
+            {mode === "forgot" ? (
+              <Button onClick={() => setMode("reset")} type="button" variant="secondary">
+                Reset password
+              </Button>
+            ) : null}
+          </div>
         </form>
       </Panel>
     </main>
@@ -247,13 +338,13 @@ export function PriorAuthWorkspace() {
     }
   }, [selectedCase?.id]);
 
-  async function runAction(action: () => Promise<void>, success: string) {
+  async function runAction(action: () => Promise<string | void>, success: string) {
     setMessage(undefined);
     setStatus("loading");
     try {
-      await action();
+      const nextMessage = await action();
       setStatus("success");
-      setMessage(success);
+      setMessage(nextMessage ?? success);
     } catch (error) {
       setStatus("error");
       setMessage(messageFrom(error, "Request failed."));
@@ -262,14 +353,35 @@ export function PriorAuthWorkspace() {
 
   function handleLogin(email: string, password: string) {
     void runAction(async () => {
-      const result = await loginDemoUser(email, password);
+      const result = await loginUser(email, password);
       setUser(result.user);
       await refreshCases();
     }, "Signed in.");
   }
 
+  function handleRegister(payload: { email: string; password: string; name: string; organization_name: string }) {
+    void runAction(async () => {
+      const result = await registerUser(payload);
+      setUser(result.user);
+      await refreshCases();
+    }, "Account created.");
+  }
+
+  function handleForgotPassword(email: string) {
+    void runAction(async () => {
+      const result = await forgotPassword(email);
+      return result.reset_token ? `${result.message} Reset token: ${result.reset_token}` : result.message;
+    }, "Password reset requested.");
+  }
+
+  function handleResetPassword(resetToken: string, password: string) {
+    void runAction(async () => {
+      await resetPassword(resetToken, password);
+    }, "Password reset complete.");
+  }
+
   async function handleLogout() {
-    await logoutDemoUser();
+    await logoutUser();
     setUser(null);
     setCases([]);
     setSelectedCaseId(undefined);
@@ -341,7 +453,16 @@ export function PriorAuthWorkspace() {
   }
 
   if (!user) {
-    return <LoginPanel message={message} onLogin={handleLogin} status={status} />;
+    return (
+      <LoginPanel
+        message={message}
+        onForgotPassword={handleForgotPassword}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onResetPassword={handleResetPassword}
+        status={status}
+      />
+    );
   }
 
   return (

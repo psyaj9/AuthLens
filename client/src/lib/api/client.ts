@@ -101,7 +101,7 @@ export async function uploadDocuments(
   return parseLocalRouteResponse(response, uploadResponseSchema);
 }
 
-export async function loginDemoUser(
+export async function loginUser(
   email: string,
   password: string
 ): Promise<LoginResponse> {
@@ -112,8 +112,6 @@ export async function loginDemoUser(
   });
   return parseLocalRouteResponse(response, authResponseSchema);
 }
-
-export const loginUser = loginDemoUser;
 
 export async function registerUser(payload: RegisterPayload): Promise<LoginResponse> {
   const response = await fetch("/api/auth/register", {
@@ -142,7 +140,7 @@ export async function resetPassword(resetToken: string, password: string) {
   return parseLocalRouteResponse(response, messageResponseSchema);
 }
 
-export async function logoutDemoUser(): Promise<void> {
+export async function logoutUser(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST" });
 }
 

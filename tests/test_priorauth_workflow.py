@@ -312,7 +312,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
 
     def test_viewer_cannot_create_cases(self):
         client = self._client()
-        token = self._login(client, email="viewer@demo.authlens.test")
+        token = self._login(client, email="viewer@test.authlens.local")
 
         response = client.post(
             "/api/cases",
@@ -374,7 +374,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
     def test_priorauth_analysis_generates_evidence_report_draft_and_citation_check(self):
         client = self._client()
         coordinator_token = self._login(client)
-        clinician_token = self._login(client, email="clinician@demo.authlens.test")
+        clinician_token = self._login(client, email="clinician@test.authlens.local")
         case_response = client.post(
             "/api/cases",
             headers={"Authorization": f"Bearer {coordinator_token}"},
@@ -464,7 +464,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
     def test_draft_edit_blocks_approval_until_citations_are_reverified(self):
         client = self._client()
         coordinator_token = self._login(client)
-        clinician_token = self._login(client, email="clinician@demo.authlens.test")
+        clinician_token = self._login(client, email="clinician@test.authlens.local")
         case_id, _criteria, _matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
         draft_response = client.post(
             f"/api/cases/{case_id}/drafts/prior-auth",
@@ -498,7 +498,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
     def test_met_override_requires_existing_citation_and_low_readiness_serializes(self):
         client = self._client()
         coordinator_token = self._login(client)
-        clinician_token = self._login(client, email="clinician@demo.authlens.test")
+        clinician_token = self._login(client, email="clinician@test.authlens.local")
         case_id = self._create_case(client, coordinator_token, "SYN-LMRI-MISSING")
         self._upload_document(
             client,
@@ -545,7 +545,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
     def test_evidence_overrides_control_readiness_drafts_and_citation_verification(self):
         client = self._client()
         coordinator_token = self._login(client)
-        clinician_token = self._login(client, email="clinician@demo.authlens.test")
+        clinician_token = self._login(client, email="clinician@test.authlens.local")
         case_id, _criteria, matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
         met_matches = [match for match in matches if match["status"] == "met"]
         self.assertGreater(len(met_matches), 0)
@@ -575,7 +575,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
     def test_clinician_can_audit_update_criteria_without_losing_source_provenance(self):
         client = self._client()
         coordinator_token = self._login(client)
-        clinician_token = self._login(client, email="clinician@demo.authlens.test")
+        clinician_token = self._login(client, email="clinician@test.authlens.local")
         _case_id, criteria, _matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
         criterion = criteria[0]
 

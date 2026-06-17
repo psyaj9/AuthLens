@@ -1,3 +1,16 @@
+# Add Self-Service Accounts And Production DB Guidance
+
+- [x] Add registration and password reset backend tests before implementation.
+- [x] Implement organization-creating registration, forgot-password, and reset-password endpoints.
+- [x] Remove static seeded demo accounts and default demo credentials from code/docs.
+- [x] Add client auth helpers, proxy routes, and account-first login/register/reset UI.
+- [ ] Verify backend/client full test, lint, typecheck, build, e2e, and migration smoke.
+- [ ] Generate one-time JWT secret for user copy/paste without reading local env files.
+
+## Review
+
+- Pending final verification.
+
 # Implement PriorAuth Evidence Copilot MVP
 
 - [x] Run current backend/client baseline checks before implementation.

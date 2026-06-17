@@ -28,7 +28,6 @@ Create a local backend env file from `.env.example`, then fill in real values lo
 ```powershell
 Copy-Item .env.example server\.env
 .\.venv\Scripts\python.exe -m alembic -c alembic.ini upgrade head
-.\.venv\Scripts\python.exe server\seed_demo.py
 Set-Location server
 ..\.venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -37,7 +36,7 @@ Main API routes:
 
 - `POST /api/upload_pdf/` uploads PDF files and indexes extracted text.
 - `POST /api/queries/` accepts form field `user_query` and returns an answer from retrieved context.
-- `POST /api/auth/login` and `GET /api/auth/me` support seeded demo users and bearer tokens.
+- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, and `GET /api/auth/me` support account creation, bearer tokens, and password reset.
 - `GET/POST /api/cases` manage organization-scoped prior authorization cases.
 - `POST/GET /api/cases/{case_id}/documents` manage typed PDF uploads and page-preserving chunks.
 - `POST/GET /api/cases/{case_id}/criteria` extract and review payer criteria.
@@ -46,7 +45,9 @@ Main API routes:
 - `POST/GET /api/cases/{case_id}/drafts` create prior-authorization drafts and verify citations.
 - `GET /api/health/` is the planned deployment health route used by Render.
 
-Seeded demo users use password `demo-password` and emails under `@demo.authlens.test`, including `coordinator@demo.authlens.test` for the default client login.
+Create the first account from the client sign-up screen or by calling `POST /api/auth/register`. Registration creates a new organization and makes the first user an `admin`.
+
+Password reset is implemented with expiring reset tokens. Local, test, and non-production environments return the reset token in the response so you can complete the reset flow manually. Production does not expose reset tokens in API responses; add an email provider before enabling public password reset for real users.
 
 ## Environment Variables
 
@@ -89,6 +90,8 @@ Do not use `NEXT_PUBLIC_BACKEND_API_URL` for the backend service URL. Keep the b
 - Health check path: `/api/health/`
 
 Create the service from the Blueprint in the Render dashboard. Render will prompt for values marked `sync: false`; provide real values in Render only, not in git. Set `ALLOWED_ORIGINS` to the Vercel production domain and any preview/local origins you intentionally support. If `INTERNAL_API_TOKEN` is enabled, set the same secret in Render and Vercel.
+
+For production persistence, set `DATABASE_URL` to a managed Postgres connection string and keep the local SQLite default for development only. The Render start command runs Alembic migrations before Uvicorn starts.
 
 ### Client on Vercel
 
