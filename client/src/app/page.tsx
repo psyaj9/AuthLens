@@ -1,5 +1,5 @@
-import { DocumentWorkspace } from "@/features/document-workspace";
+import { PriorAuthWorkspace } from "@/features/prior-auth-workspace";
 
 export default function Home() {
-  return <DocumentWorkspace />;
+  return <PriorAuthWorkspace />;
 }

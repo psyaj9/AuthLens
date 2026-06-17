@@ -20,14 +20,15 @@ Use Python 3.12 or newer. The backend dependency source is `server/requirements.
 
 ```powershell
 py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r server\requirements.txt
+uv pip install --python .\.venv\Scripts\python.exe -r server\requirements.txt
 ```
 
 Create a local backend env file from `.env.example`, then fill in real values locally only. The API should be started from `server/` so imports resolve the same way as the test suite.
 
 ```powershell
 Copy-Item .env.example server\.env
+.\.venv\Scripts\python.exe -m alembic -c alembic.ini upgrade head
+.\.venv\Scripts\python.exe server\seed_demo.py
 Set-Location server
 ..\.venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -36,7 +37,16 @@ Main API routes:
 
 - `POST /api/upload_pdf/` uploads PDF files and indexes extracted text.
 - `POST /api/queries/` accepts form field `user_query` and returns an answer from retrieved context.
+- `POST /api/auth/login` and `GET /api/auth/me` support seeded demo users and bearer tokens.
+- `GET/POST /api/cases` manage organization-scoped prior authorization cases.
+- `POST/GET /api/cases/{case_id}/documents` manage typed PDF uploads and page-preserving chunks.
+- `POST/GET /api/cases/{case_id}/criteria` extract and review payer criteria.
+- `POST/GET /api/cases/{case_id}/evidence` match patient-document evidence to criteria.
+- `POST/GET /api/cases/{case_id}/reports` generate readiness reports.
+- `POST/GET /api/cases/{case_id}/drafts` create prior-authorization drafts and verify citations.
 - `GET /api/health/` is the planned deployment health route used by Render.
+
+Seeded demo users use password `demo-password` and emails under `@demo.authlens.test`, including `coordinator@demo.authlens.test` for the default client login.
 
 ## Environment Variables
 
@@ -51,6 +61,8 @@ Backend variables:
 | `PINECONE_ENVIRONMENT` | Yes | Pinecone environment/region for the index. |
 | `PINECONE_INDEX_NAME` | Yes | Pinecone index name. |
 | `ALLOWED_ORIGINS` | Yes | Comma-separated browser origins allowed to call the backend, such as local client and Vercel URLs. |
+| `DATABASE_URL` | No | Defaults to local SQLite at `server/authlens.db`; use a Postgres URL for deployed environments. |
+| `JWT_SECRET` | Production | Required when `ENVIRONMENT=production`; local/test runs use a non-production fallback if unset. |
 | `INTERNAL_API_TOKEN` | Production | Shared service token for client-to-backend calls when the backend enforces internal auth. |
 | `MAX_UPLOAD_MB` | No | Upload size limit in megabytes. |
 | `MAX_UPLOAD_FILES` | No | Maximum uploaded files per request. |

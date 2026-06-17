@@ -1,28 +1,30 @@
 import { expect, test } from "@playwright/test";
 
-test.describe("AuthLens workspace", () => {
-  test("renders the app workspace as the first screen", async ({ page }) => {
+test.describe("PriorAuth Evidence Copilot", () => {
+  test("renders demo login as the first screen", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "AuthLens" })).toBeVisible();
     await expect(
-      page.getByText("Synthetic or de-identified PDFs only.").first()
+      page.getByRole("heading", { name: "PriorAuth Evidence Copilot" })
     ).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Workspace" })).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Sources & status" })
+      page.getByText("Synthetic or de-identified documents only.").first()
     ).toBeVisible();
-    await expect(page.getByLabel("Question")).toBeVisible();
+    await expect(page.getByLabel("Email")).toHaveValue("coordinator@demo.authlens.test");
+    await expect(page.getByLabel("Password")).toHaveValue("demo-password");
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
-  test("keeps core panels available on mobile", async ({ page }) => {
+  test("keeps demo login usable on mobile", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Workspace" })).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Sources & status" })
+      page.getByRole("heading", { name: "PriorAuth Evidence Copilot" })
+    ).toBeVisible();
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByLabel("Password")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Sign in" })
     ).toBeVisible();
   });
 });

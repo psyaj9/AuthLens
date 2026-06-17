@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: server
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: python -m alembic -c ../alembic.ini upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health/
     envVars:
       - key: ENVIRONMENT
@@ -22,6 +22,10 @@ services:
       - key: PINECONE_INDEX_NAME
         sync: false
       - key: ALLOWED_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
         sync: false
       - key: INTERNAL_API_TOKEN
         sync: false
