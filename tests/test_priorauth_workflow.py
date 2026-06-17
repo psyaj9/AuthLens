@@ -259,6 +259,39 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         new_login_response = client.post("/api/auth/login", json={"email": email, "password": "new-password"})
         self.assertEqual(new_login_response.status_code, 200, new_login_response.text)
 
+    def test_forgot_password_invalidates_previous_unused_reset_tokens(self):
+        client = self._client()
+        email = "reset-rotate@example.test"
+        self._create_test_user(email=email, password="old-password", role="admin")
+
+        first_response = client.post("/api/auth/forgot-password", json={"email": email})
+        self.assertEqual(first_response.status_code, 200, first_response.text)
+        first_token = first_response.json()["reset_token"]
+
+        second_response = client.post("/api/auth/forgot-password", json={"email": email})
+        self.assertEqual(second_response.status_code, 200, second_response.text)
+        second_token = second_response.json()["reset_token"]
+
+        stale_response = client.post(
+            "/api/auth/reset-password",
+            json={"reset_token": first_token, "password": "stale-password"},
+        )
+        self.assertEqual(stale_response.status_code, 400)
+        self.assertEqual(stale_response.json(), {"error": "Invalid or expired reset token"})
+
+        reset_response = client.post(
+            "/api/auth/reset-password",
+            json={"reset_token": second_token, "password": "new-password"},
+        )
+        self.assertEqual(reset_response.status_code, 200, reset_response.text)
+
+        reuse_response = client.post(
+            "/api/auth/reset-password",
+            json={"reset_token": second_token, "password": "reused-password"},
+        )
+        self.assertEqual(reuse_response.status_code, 400)
+        self.assertEqual(reuse_response.json(), {"error": "Invalid or expired reset token"})
+
     def test_coordinator_can_create_and_list_org_scoped_cases(self):
         client = self._client()
         token = self._login(client)

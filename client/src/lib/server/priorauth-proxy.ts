@@ -27,6 +27,16 @@ export function getAuthTokenFromRequest(request: Request) {
   return parseCookie(request.headers.get("cookie"), AUTH_COOKIE_NAME);
 }
 
+export function authCookieOptions(maxAge: number) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge
+  };
+}
+
 export function authHeaders(request: Request, json = false): Headers {
   const headers = new Headers();
   const token = getAuthTokenFromRequest(request);

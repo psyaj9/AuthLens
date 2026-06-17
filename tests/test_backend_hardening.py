@@ -129,6 +129,38 @@ class BackendHardeningTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "ALLOWED_ORIGINS cannot include wildcard"):
                 self._client()
 
+    def test_production_lifespan_rejects_missing_required_configuration(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
+            for name in [
+                "JWT_SECRET",
+                "DATABASE_URL",
+                "ALLOWED_ORIGINS",
+                "INTERNAL_API_TOKEN",
+            ]:
+                os.environ.pop(name, None)
+            main = importlib.import_module("main")
+
+            with self.assertRaisesRegex(RuntimeError, "is required in production"):
+                with TestClient(main.app):
+                    pass
+
+    def test_production_configuration_rejects_sqlite_database_url(self):
+        with patch.dict(
+            os.environ,
+            {
+                "ENVIRONMENT": "production",
+                "JWT_SECRET": "production-secret",
+                "DATABASE_URL": "sqlite:///prod.db",
+                "ALLOWED_ORIGINS": "https://app.example.com",
+                "INTERNAL_API_TOKEN": "internal-secret",
+            },
+            clear=False,
+        ):
+            config_module = importlib.import_module("modules.config")
+
+            with self.assertRaisesRegex(RuntimeError, "DATABASE_URL must use PostgreSQL"):
+                config_module.validate_production_config()
+
     def test_unhandled_errors_use_error_response_shape(self):
         main = importlib.import_module("main")
 
@@ -161,6 +193,25 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(query_response.status_code, 401)
         self.assertEqual(query_response.json(), {"error": "Unauthorized"})
         self.assertEqual(health_response.status_code, 200)
+
+    def test_internal_token_fails_closed_for_legacy_routes_in_production(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
+            os.environ.pop("INTERNAL_API_TOKEN", None)
+            client = self._client()
+
+            query_response = client.post(
+                "/api/queries/",
+                data={"user_query": "what is diabetes?"},
+            )
+            upload_response = client.post(
+                "/api/upload_pdf/",
+                files=[("uploaded_files", ("doc.pdf", b"%PDF-1.4", "application/pdf"))],
+            )
+
+        self.assertEqual(query_response.status_code, 401)
+        self.assertEqual(query_response.json(), {"error": "Unauthorized"})
+        self.assertEqual(upload_response.status_code, 401)
+        self.assertEqual(upload_response.json(), {"error": "Unauthorized"})
 
     def test_internal_token_allows_authorized_query_with_existing_wire_shape(self):
         with patch.dict(os.environ, {"INTERNAL_API_TOKEN": "secret"}, clear=False):
@@ -313,7 +364,11 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(observed_payloads, [b"%PDF-stream"])
 
     def test_upload_rejection_logs_do_not_include_filename_in_production(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "MAX_UPLOAD_MB": "1"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"ENVIRONMENT": "production", "MAX_UPLOAD_MB": "1", "INTERNAL_API_TOKEN": "secret"},
+            clear=False,
+        ):
             client = self._client()
             upload_module = importlib.import_module("routes.upload_pdf")
 
@@ -321,6 +376,7 @@ class BackendHardeningTests(unittest.TestCase):
                 with self.assertLogs(upload_module.logger, level="WARNING") as logs:
                     response = client.post(
                         "/api/upload_pdf/",
+                        headers={"Authorization": "Bearer secret"},
                         files=[
                             (
                                 "uploaded_files",
@@ -339,7 +395,11 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertNotIn("uploaded-sensitive-name.pdf", "\n".join(logs.output))
 
     def test_queries_suppresses_sensitive_content_logs_in_production(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"ENVIRONMENT": "production", "INTERNAL_API_TOKEN": "secret"},
+            clear=False,
+        ):
             client = self._client()
             queries_module, index, embeddings = self._query_dependencies()
 
@@ -359,6 +419,7 @@ class BackendHardeningTests(unittest.TestCase):
             ), self.assertLogs(queries_module.logger, level="INFO") as logs:
                 response = client.post(
                     "/api/queries/",
+                    headers={"Authorization": "Bearer secret"},
                     data={"user_query": "what is diabetes?"},
                 )
 
@@ -369,7 +430,11 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertNotIn("Sensitive document chunk", log_text)
 
     def test_query_errors_do_not_leak_exception_details_in_production(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"ENVIRONMENT": "production", "INTERNAL_API_TOKEN": "secret"},
+            clear=False,
+        ):
             client = self._client()
             queries_module, index, embeddings = self._query_dependencies()
 
@@ -386,6 +451,7 @@ class BackendHardeningTests(unittest.TestCase):
             ):
                 response = client.post(
                     "/api/queries/",
+                    headers={"Authorization": "Bearer secret"},
                     data={"user_query": "what is diabetes?"},
                 )
 
@@ -393,7 +459,11 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(response.json(), {"error": "Unable to process query."})
 
     def test_upload_errors_do_not_leak_exception_details_in_production(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
+        with patch.dict(
+            os.environ,
+            {"ENVIRONMENT": "production", "INTERNAL_API_TOKEN": "secret"},
+            clear=False,
+        ):
             client = self._client()
             upload_module = importlib.import_module("routes.upload_pdf")
 
@@ -404,6 +474,7 @@ class BackendHardeningTests(unittest.TestCase):
             ):
                 response = client.post(
                     "/api/upload_pdf/",
+                    headers={"Authorization": "Bearer secret"},
                     files=[("uploaded_files", ("doc.pdf", b"%PDF-1.4", "application/pdf"))],
                 )
 

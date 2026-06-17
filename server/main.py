@@ -1,8 +1,10 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from middlewares.exception_handlers import catch_exceptions
-from modules.config import get_allowed_origins
+from modules.config import get_allowed_origins, validate_production_config
 from modules.schemas import ErrorResponse
 from routes.audit import router as audit_router
 from routes.auth import router as auth_router
@@ -17,7 +19,13 @@ from routes.upload_pdf import router as upload_router
 from routes.queries import router as query_router
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    validate_production_config()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.exception_handler(HTTPException)

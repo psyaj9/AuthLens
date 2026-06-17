@@ -122,12 +122,22 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
     reset_token = None
     user = db.scalar(select(User).where(User.email == normalize_email(payload.email)))
     if user is not None and user.is_active:
+        now = datetime.now(UTC)
+        existing_tokens = db.scalars(
+            select(PasswordResetToken).where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None),
+            )
+        ).all()
+        for existing_token in existing_tokens:
+            existing_token.used_at = now
+
         raw_token = token_urlsafe(32)
         membership = db.scalar(select(OrganizationMembership).where(OrganizationMembership.user_id == user.id))
         token_record = PasswordResetToken(
             user_id=user.id,
             token_hash=hash_reset_token(raw_token),
-            expires_at=datetime.now(UTC) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+            expires_at=now + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
         )
         db.add(token_record)
         if membership is not None:
@@ -165,6 +175,16 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
     membership = db.scalar(select(OrganizationMembership).where(OrganizationMembership.user_id == user.id))
     user.password_hash = hash_password(payload.password)
     token_record.used_at = now
+    remaining_tokens = db.scalars(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.id != token_record.id,
+            PasswordResetToken.used_at.is_(None),
+        )
+    ).all()
+    for remaining_token in remaining_tokens:
+        remaining_token.used_at = now
+
     if membership is not None:
         log_audit_event(
             db,

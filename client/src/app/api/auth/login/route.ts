@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   AUTH_COOKIE_NAME,
+  authCookieOptions,
   errorResponse,
   proxyBackendJson,
   rejectCrossOriginMutation
@@ -27,11 +28,6 @@ export async function POST(request: Request) {
   }
 
   const nextResponse = NextResponse.json(payload);
-  nextResponse.cookies.set(AUTH_COOKIE_NAME, payload.access_token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 8
-  });
+  nextResponse.cookies.set(AUTH_COOKIE_NAME, payload.access_token, authCookieOptions(60 * 60 * 8));
   return nextResponse;
 }

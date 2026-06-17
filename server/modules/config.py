@@ -19,6 +19,28 @@ def is_production() -> bool:
     return get_environment() == "production"
 
 
+def _required_production_env(name: str) -> str:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        raise RuntimeError(f"{name} is required in production")
+    return value.strip()
+
+
+def validate_production_config() -> None:
+    if not is_production():
+        return
+
+    _required_production_env("JWT_SECRET")
+    database_url = _required_production_env("DATABASE_URL")
+    _required_production_env("ALLOWED_ORIGINS")
+    _required_production_env("INTERNAL_API_TOKEN")
+
+    if database_url.strip().lower().startswith("sqlite"):
+        raise RuntimeError("DATABASE_URL must use PostgreSQL in production")
+
+    get_allowed_origins()
+
+
 def get_allowed_origins() -> list[str]:
     configured_origins = os.getenv("ALLOWED_ORIGINS", "")
     origins = [
