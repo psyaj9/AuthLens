@@ -6,7 +6,7 @@ from logger import logger
 
 router = APIRouter()
 
-@router.post("/upload_pdf")
+@router.post("/upload_pdf/")
 async def upload_pdf(uploaded_files: List[UploadFile] = File(...),):
     try:
         logger.info(f"Received {len(uploaded_files)} files for upload.")

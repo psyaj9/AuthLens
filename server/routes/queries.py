@@ -12,7 +12,7 @@ from logger import logger
 
 router = APIRouter()
 
-@router.post("/queries")
+@router.post("/queries/")
 async def queries(
     user_query: str = Form(...),
     retriever: BaseRetriever = Form(...),
