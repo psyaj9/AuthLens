@@ -10,6 +10,8 @@ import {
   draftListSchema,
   draftSchema,
   evidenceListSchema,
+  forgotPasswordResponseSchema,
+  messageResponseSchema,
   readinessReportSchema,
   userProfileSchema,
   type CaseDocument,
@@ -32,6 +34,12 @@ const uploadResponseSchema = z.record(z.string(), z.unknown());
 export type QaClientResponse = z.infer<typeof qaResponseSchema>;
 export type UploadClientResponse = z.infer<typeof uploadResponseSchema>;
 export type LoginResponse = z.infer<typeof authResponseSchema>;
+export type RegisterPayload = {
+  email: string;
+  password: string;
+  name: string;
+  organization_name: string;
+};
 
 export class AuthLensApiError extends Error {
   status: number;
@@ -103,6 +111,35 @@ export async function loginDemoUser(
     body: JSON.stringify({ email, password })
   });
   return parseLocalRouteResponse(response, authResponseSchema);
+}
+
+export const loginUser = loginDemoUser;
+
+export async function registerUser(payload: RegisterPayload): Promise<LoginResponse> {
+  const response = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return parseLocalRouteResponse(response, authResponseSchema);
+}
+
+export async function forgotPassword(email: string) {
+  const response = await fetch("/api/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  });
+  return parseLocalRouteResponse(response, forgotPasswordResponseSchema);
+}
+
+export async function resetPassword(resetToken: string, password: string) {
+  const response = await fetch("/api/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reset_token: resetToken, password })
+  });
+  return parseLocalRouteResponse(response, messageResponseSchema);
 }
 
 export async function logoutDemoUser(): Promise<void> {

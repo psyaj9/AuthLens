@@ -20,6 +20,15 @@ export const authResponseSchema = z.object({
   user: userProfileSchema
 });
 
+export const messageResponseSchema = z.object({
+  message: z.string()
+});
+
+export const forgotPasswordResponseSchema = z.object({
+  message: z.string(),
+  reset_token: z.string().nullable().optional()
+});
+
 export const caseSchema = z.object({
   id: z.string(),
   patient_label: z.string(),
@@ -141,6 +150,8 @@ export const citationCheckSchema = z.object({
 });
 
 export type UserProfile = z.infer<typeof userProfileSchema>;
+export type MessageResponse = z.infer<typeof messageResponseSchema>;
+export type ForgotPasswordResponse = z.infer<typeof forgotPasswordResponseSchema>;
 export type CaseSummary = z.infer<typeof caseSchema>;
 export type CaseDocument = z.infer<typeof documentSchema>;
 export type Criterion = z.infer<typeof criterionSchema>;

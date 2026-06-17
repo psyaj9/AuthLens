@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("PriorAuth Evidence Copilot", () => {
-  test("renders demo login as the first screen", async ({ page }) => {
+  test("renders account login as the first screen without static credentials", async ({ page }) => {
     await page.goto("/");
 
     await expect(
@@ -10,12 +10,14 @@ test.describe("PriorAuth Evidence Copilot", () => {
     await expect(
       page.getByText("Synthetic or de-identified documents only.").first()
     ).toBeVisible();
-    await expect(page.getByLabel("Email")).toHaveValue("coordinator@demo.authlens.test");
-    await expect(page.getByLabel("Password")).toHaveValue("demo-password");
+    await expect(page.getByLabel("Email")).toHaveValue("");
+    await expect(page.getByLabel("Password")).toHaveValue("");
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Forgot password" })).toBeVisible();
   });
 
-  test("keeps demo login usable on mobile", async ({ page }) => {
+  test("keeps account login usable on mobile", async ({ page }) => {
     await page.goto("/");
 
     await expect(
