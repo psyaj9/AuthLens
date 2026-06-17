@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { askQuestion, AuthLensApiError, uploadDocuments } from "./client";
 
-describe("frontend API client", () => {
+describe("client API client", () => {
   it("posts questions to the local Next.js API route without exposing the backend URL", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({

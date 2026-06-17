@@ -1,6 +1,8 @@
 import os
 import time
 from pathlib import Path
+from typing import Any
+
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 from pinecone import Pinecone, ServerlessSpec
@@ -21,8 +23,8 @@ PINECONE_DIMENSION = 768
 PINECONE_METRIC = "cosine"
 EMBEDDING_MODEL = "gemini-embedding-2-preview"
 
-_pinecone_index = None
-_pinecone_index_name = None
+_pinecone_index: Any | None = None
+_pinecone_index_name: str | None = None
 
 
 def _required_env(name: str) -> str:
@@ -32,17 +34,17 @@ def _required_env(name: str) -> str:
     return value
 
 
-def _index_names(indexes) -> set[str]:
+def _index_names(indexes: Any) -> set[str]:
     return {
         index if isinstance(index, str) else index.name
         for index in indexes
     }
 
 
-def get_pinecone_index():
+def get_pinecone_index() -> tuple[Any, str]:
     global _pinecone_index, _pinecone_index_name
 
-    if _pinecone_index is not None:
+    if _pinecone_index is not None and _pinecone_index_name is not None:
         return _pinecone_index, _pinecone_index_name
 
     google_api_key = _required_env("GOOGLE_API_KEY")

@@ -1,5 +1,5 @@
 {
-  "name": "authlens-frontend",
+  "name": "authlens-client",
   "version": "0.1.0",
   "private": true,
   "scripts": {

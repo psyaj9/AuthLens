@@ -1,20 +1,22 @@
 .venv
 .env
+.env.local
+.env.*.local
 __pycache__/
 *.py[cod]
 server/app.log
 server/uploads/
 
-# Frontend dependencies and build artifacts
+# Client dependencies and build artifacts
 node_modules/
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-frontend/.vercel/
-frontend/test-results/
-frontend/playwright-report/
-frontend/coverage/
-frontend/tsconfig.tsbuildinfo
+client/node_modules/
+client/.next/
+client/out/
+client/.vercel/
+client/test-results/
+client/playwright-report/
+client/coverage/
+client/tsconfig.tsbuildinfo
 
 # Tooling caches
 .pytest_cache/

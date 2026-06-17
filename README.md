@@ -1,6 +1,6 @@
 # AuthLens
 
-AuthLens is a FastAPI backend for uploading PDF medical documents, storing extracted chunks in Pinecone, and answering questions with Gemini embeddings plus a Groq-backed LangChain QA chain. The planned production topology is a Render-hosted Python API and a Vercel-hosted frontend rooted at `frontend/`.
+AuthLens is a FastAPI backend for uploading PDF medical documents, storing extracted chunks in Pinecone, and answering questions with Gemini embeddings plus a Groq-backed LangChain QA chain. The planned production topology is a Render-hosted Python API and a Vercel-hosted client app rooted at `client/`.
 
 ## Safety Notice
 
@@ -10,9 +10,9 @@ AuthLens handles medical-document content and should be treated as a demo or int
 
 - `server/` - FastAPI app, routes, LangChain/Pinecone modules, backend dependencies.
 - `tests/` - backend unittest suite.
-- `frontend/` - planned Vercel frontend root directory.
+- `client/` - Next.js client app and planned Vercel root directory.
 - `render.yaml` - Render Blueprint for the backend service.
-- `.circleci/config.yml` - backend and frontend CI jobs.
+- `.circleci/config.yml` - backend and client CI jobs.
 
 ## Local Backend Development
 
@@ -24,12 +24,12 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r server\requirements.txt
 ```
 
-Create a local env file from `.env.example`, then fill in real values locally only. The API should be started from `server/` so imports resolve the same way as the test suite.
+Create a local backend env file from `.env.example`, then fill in real values locally only. The API should be started from `server/` so imports resolve the same way as the test suite.
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env.example server\.env
 Set-Location server
-..\.venv\Scripts\python.exe -m uvicorn main:app --reload
+..\.venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Main API routes:
@@ -50,20 +50,20 @@ Backend variables:
 | `PINECONE_API_KEY` | Yes | Secret Pinecone API key. |
 | `PINECONE_ENVIRONMENT` | Yes | Pinecone environment/region for the index. |
 | `PINECONE_INDEX_NAME` | Yes | Pinecone index name. |
-| `ALLOWED_ORIGINS` | Yes | Comma-separated browser origins allowed to call the backend, such as local frontend and Vercel URLs. |
-| `INTERNAL_API_TOKEN` | Production | Shared service token for frontend-to-backend calls when the backend enforces internal auth. |
+| `ALLOWED_ORIGINS` | Yes | Comma-separated browser origins allowed to call the backend, such as local client and Vercel URLs. |
+| `INTERNAL_API_TOKEN` | Production | Shared service token for client-to-backend calls when the backend enforces internal auth. |
 | `MAX_UPLOAD_MB` | No | Upload size limit in megabytes. |
 | `MAX_UPLOAD_FILES` | No | Maximum uploaded files per request. |
 | `ENVIRONMENT` | No | Use `local`, `preview`, or `production`. |
 
-Frontend variables belong in the frontend app:
+Client variables belong in the Next.js app:
 
 | Name | Required | Notes |
 | --- | --- | --- |
 | `BACKEND_API_URL` | Yes | Server-side URL for the Render backend, for example `https://authlens-backend.onrender.com`. |
 | `INTERNAL_API_TOKEN` | If backend uses it | Must match the backend value for service-to-service requests. |
 
-Do not use `NEXT_PUBLIC_BACKEND_API_URL` for the backend service URL. Keep the backend URL server-side and proxy browser requests through frontend server routes where needed.
+Do not use `NEXT_PUBLIC_BACKEND_API_URL` for the backend service URL. Keep the backend URL server-side and proxy browser requests through client server routes where needed.
 
 ## Deployment
 
@@ -72,27 +72,27 @@ Do not use `NEXT_PUBLIC_BACKEND_API_URL` for the backend service URL. Keep the b
 `render.yaml` defines one Python web service:
 
 - Root directory: `server`
-- Build command: `uv pip install -r requirements.txt`
+- Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 - Health check path: `/api/health/`
 
 Create the service from the Blueprint in the Render dashboard. Render will prompt for values marked `sync: false`; provide real values in Render only, not in git. Set `ALLOWED_ORIGINS` to the Vercel production domain and any preview/local origins you intentionally support. If `INTERNAL_API_TOKEN` is enabled, set the same secret in Render and Vercel.
 
-### Frontend on Vercel
+### Client on Vercel
 
-Create a separate Vercel project for the frontend and set the Project Root Directory to `frontend/`. Vercel will install and build from that directory. Configure:
+Create a separate Vercel project for the client and set the Project Root Directory to `client/`. Vercel will install and build from that directory. Configure:
 
 - `BACKEND_API_URL` as the Render backend base URL.
 - `INTERNAL_API_TOKEN` only if the backend requires it.
 
-For local frontend work, set those values in your local shell or frontend-local env file only. Do not commit frontend env files.
+For local client work, set those values in `client/.env.local` only. Do not commit local env files.
 
 ## CI
 
 CircleCI runs two independent jobs:
 
 - `backend-test` uses `cimg/python`, caches pip downloads by `server/requirements.txt`, installs backend dependencies, and runs `python -m unittest discover tests`.
-- `frontend-test-build` uses `cimg/node`, verifies `frontend/package.json` and `frontend/package-lock.json`, caches npm downloads by `frontend/package-lock.json`, then runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` from `frontend/`.
+- `client-test-build` uses `cimg/node`, verifies `client/package.json` and `client/package-lock.json`, caches npm downloads by `client/package-lock.json`, then runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` from `client/`.
 
 CircleCI dependency caches are keyed by dependency files and are treated as an optimization only; a cache miss should still perform a clean install.
 
@@ -104,10 +104,11 @@ Backend:
 .\.venv\Scripts\python.exe -m unittest discover tests
 ```
 
-Frontend:
+Client:
 
 ```powershell
-Set-Location frontend
+Set-Location client
+Copy-Item .env.example .env.local
 npm ci
 npm run lint
 npm run typecheck
@@ -119,5 +120,5 @@ Post-deploy smoke checks:
 
 ```powershell
 curl.exe https://<render-backend-host>/api/health/
-curl.exe https://<vercel-frontend-host>/
+curl.exe https://<vercel-client-host>/
 ```

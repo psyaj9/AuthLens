@@ -110,7 +110,7 @@ def _validate_uploaded_files(uploaded_files: List[UploadFile]) -> None:
 )
 async def upload_pdf(
     uploaded_files: List[UploadFile] = File(...),
-    _: None = Depends(require_internal_token),
+    _token_guard: None = Depends(require_internal_token),
 ):
     try:
         _validate_uploaded_files(uploaded_files)

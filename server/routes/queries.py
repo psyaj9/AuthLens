@@ -6,6 +6,7 @@ from modules.query_handler import handle_query_chain
 from modules.schemas import ErrorResponse, QueryResponse
 from modules.security import require_internal_token
 from modules.vector_store import get_embeddings, get_pinecone_index
+from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_classic.schema import BaseRetriever
 from pydantic import Field
@@ -32,7 +33,7 @@ def _error_response(message: str, status_code: int) -> JSONResponse:
 )
 async def queries(
     user_query: str = Form(...),
-    _: None = Depends(require_internal_token),
+    _token_guard: None = Depends(require_internal_token),
 ):
     try:
         if is_production():
@@ -40,7 +41,7 @@ async def queries(
         else:
             logger.info(f"Received query: {user_query}")
 
-        pinecone_index, _ = get_pinecone_index()
+        pinecone_index, _index_name = get_pinecone_index()
         embeddings = get_embeddings()
         embedded_query = embeddings.embed_query(user_query)
 
@@ -60,7 +61,12 @@ async def queries(
             tags: Optional[List[str]] = Field(default_factory=list)
             metadata: Optional[dict] = Field(default_factory=dict)
 
-            def _get_relevant_documents(self, query: str) -> List[Document]:
+            def _get_relevant_documents(
+                self,
+                query: str,
+                *,
+                run_manager: CallbackManagerForRetrieverRun,
+            ) -> List[Document]:
                 return self.documents
 
         retriever = SimpleRetriever(documents=documents)

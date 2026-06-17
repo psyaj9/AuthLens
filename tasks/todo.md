@@ -1,22 +1,49 @@
-# Build Next.js frontend and production deployment binding
+# Fix client API proxy 503/502
 
-- [x] Confirm baseline repo state and existing frontend directory status.
-- [x] Harden FastAPI backend for production frontend binding.
-- [x] Add stable API contracts, health check, upload validation, and internal token guard.
-- [x] Build a Next.js frontend with server-side proxy route handlers.
-- [x] Implement the approved AuthLens workspace UI with safety-edited demo copy.
-- [x] Add Vercel, Render, CircleCI, and environment documentation/configuration.
-- [x] Run security review and fix actionable findings.
-- [x] Verify backend tests, frontend lint/type/test/build, and rendered workflow.
+- [ ] Inspect client proxy routes and backend health/upload handlers.
+- [ ] Reproduce the reported `/api/health` 503 and `/api/upload` 502 locally.
+- [ ] Apply the minimal root-cause fix.
+- [ ] Verify focused client/backend tests and endpoint behavior.
 
 ## Review
 
-- Added `.gitignore` coverage for frontend dependencies, Next build output, Playwright output, coverage, TypeScript build info, and Python/tooling caches to avoid giant commits.
+- Pending.
+
+# Rename Next.js app root to client and fix type diagnostic
+
+- [x] Move the Next.js app source/config into `client/` without moving generated artifacts.
+- [x] Remove stale generated old app-root artifacts after a workspace path safety check.
+- [x] Update CI, docs, env templates, package metadata, and ignore rules for the `client/` root.
+- [x] Fix the backend Pylance type diagnostic around cached Pinecone state.
+- [x] Re-run backend and client verification commands.
+
+## Review
+
+- Moved the Next.js app to `client/` and kept generated dependency/build outputs ignored.
+- Added `client/.env.example` and updated `.env.example`, README, CircleCI, and package metadata for the new app root.
+- Annotated the Pinecone cache globals so assigning a resolved index name no longer conflicts with a literal `None` inference.
+- Renamed the query route throwaway bindings so the dependency result is no longer reused for the Pinecone index name.
+- Verified with backend unittests, focused Pyright, client lint/type/test/build/e2e, and an ignore-rule check for generated/local env artifacts.
+
+# Build Next.js client and production deployment binding
+
+- [x] Confirm baseline repo state and existing client directory status.
+- [x] Harden FastAPI backend for production client binding.
+- [x] Add stable API contracts, health check, upload validation, and internal token guard.
+- [x] Build a Next.js client with server-side proxy route handlers.
+- [x] Implement the approved AuthLens workspace UI with safety-edited demo copy.
+- [x] Add Vercel, Render, CircleCI, and environment documentation/configuration.
+- [x] Run security review and fix actionable findings.
+- [x] Verify backend tests, client lint/type/test/build, and rendered workflow.
+
+## Review
+
+- Added `.gitignore` coverage for client dependencies, Next build output, Playwright output, coverage, TypeScript build info, and Python/tooling caches to avoid giant commits.
 - Added FastAPI health, production CORS, internal token guard, typed response schemas, upload validation, production-safe error responses, production log redaction, and upload cleanup.
-- Added a Next.js frontend under `frontend/` with server-side proxy route handlers, structured workspace components, PDF upload flow, question/answer flow, source/status panel, loading/error/empty states, and safety-edited demo copy.
+- Added a Next.js client under `client/` with server-side proxy route handlers, structured workspace components, PDF upload flow, question/answer flow, source/status panel, loading/error/empty states, and safety-edited demo copy.
 - Added Render, Vercel, CircleCI, and local/deployment documentation/configuration.
-- Ran subagent reviews for backend/security, frontend/build, and deploy/CI/git hygiene; fixed wildcard CORS, source-path disclosure, PDF signature validation, unsafe filenames, production upload logging, health contract validation, order-dependent tests, and async accessibility announcements.
-- Verified backend with `.venv\Scripts\python.exe -m unittest discover tests` and frontend with `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`.
+- Ran subagent reviews for backend/security, client/build, and deploy/CI/git hygiene; fixed wildcard CORS, source-path disclosure, PDF signature validation, unsafe filenames, production upload logging, health contract validation, order-dependent tests, and async accessibility announcements.
+- Verified backend with `.venv\Scripts\python.exe -m unittest discover tests` and client with `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`.
 - Verified rendered UI with Playwright: `npm run test:e2e` reported all 4 desktop/mobile tests as passed before the process hang, then controlled desktop and mobile screenshots were captured at `1440x960` and `390x844`.
 
 # Fix server logger startup failure
