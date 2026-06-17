@@ -86,10 +86,10 @@ Do not use `NEXT_PUBLIC_BACKEND_API_URL` for the backend service URL. Keep the b
 
 - Root directory: `server`
 - Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- Start command: `python -m alembic -c ../alembic.ini upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT`
 - Health check path: `/api/health/`
 
-Create the service from the Blueprint in the Render dashboard. Render will prompt for values marked `sync: false`; provide real values in Render only, not in git. Set `ALLOWED_ORIGINS` to the Vercel production domain and any preview/local origins you intentionally support. If `INTERNAL_API_TOKEN` is enabled, set the same secret in Render and Vercel.
+Create the service from the Blueprint in the Render dashboard. Render will prompt for values marked `sync: false`; provide real values in Render only, not in git. If you created the service manually instead of from the Blueprint, set the same root directory, build command, and start command in Render's service settings. Set `ALLOWED_ORIGINS` to the Vercel production domain and any preview/local origins you intentionally support. If `INTERNAL_API_TOKEN` is enabled, set the same secret in Render and Vercel.
 
 For production persistence, set `DATABASE_URL` to a managed Postgres connection string and keep the local SQLite default for development only. The Render start command runs Alembic migrations before Uvicorn starts.
 

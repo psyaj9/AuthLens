@@ -1,3 +1,17 @@
+# Fix Render Postgres Deployment Startup
+
+- [x] Confirm the Render traceback points to SQLAlchemy's Postgres driver import.
+- [x] Add a deployment-config regression test for the Postgres driver and Render migration start command.
+- [x] Add the missing Postgres DBAPI dependency and align README deployment instructions with `render.yaml`.
+- [x] Verify focused deployment-config tests and backend test suite.
+
+## Review
+
+- Root cause: Render used a Postgres `DATABASE_URL`, so SQLAlchemy selected the `psycopg2` dialect driver, but `psycopg2` was not installed by `server/requirements.txt`.
+- Added `psycopg2-binary` to backend requirements and regression coverage so this deployment dependency does not get removed accidentally.
+- Confirmed `render.yaml` already runs Alembic before Uvicorn, then fixed README to document the same command and warn manual Render services must copy it into the dashboard.
+- Verified `tests.test_deployment_config`, full backend unittest discovery, dependency installation through `uv pip`, and a fake-Postgres SQLAlchemy import smoke reporting driver `psycopg2`.
+
 # Add Self-Service Accounts And Production DB Guidance
 
 - [x] Add registration and password reset backend tests before implementation.
