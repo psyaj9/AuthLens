@@ -52,6 +52,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
             "routes.evidence",
             "routes.reports",
             "routes.drafts",
+            "routes.audit",
             "services",
         )
         for module_name in list(sys.modules):
@@ -495,6 +496,39 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(approve_response.status_code, 400)
         self.assertEqual(approve_response.json(), {"error": "Draft must be citation-verified after the latest edit"})
 
+    def test_citation_verification_fails_when_human_review_disclaimer_is_removed(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id, _criteria, _matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
+        draft_response = client.post(
+            f"/api/cases/{case_id}/drafts/prior-auth",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(draft_response.status_code, 200, draft_response.text)
+        draft = draft_response.json()
+        edited_content = draft["content_markdown"].replace(
+            "Clinician review is required before submission. This draft does not diagnose, recommend treatment, or guarantee payer approval.",
+            "Ready for submission.",
+        )
+        edit_response = client.patch(
+            f"/api/drafts/{draft['id']}",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+            json={"content_markdown": edited_content},
+        )
+        self.assertEqual(edit_response.status_code, 200, edit_response.text)
+
+        check_response = client.post(
+            f"/api/drafts/{draft['id']}/verify-citations",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+
+        self.assertEqual(check_response.status_code, 200, check_response.text)
+        payload = check_response.json()
+        self.assertEqual(payload["verification_status"], "fail")
+        self.assertTrue(
+            any("human review disclaimer" in claim["issue"].lower() for claim in payload["unsupported_claims"])
+        )
+
     def test_met_override_requires_existing_citation_and_low_readiness_serializes(self):
         client = self._client()
         coordinator_token = self._login(client)
@@ -595,6 +629,49 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(payload["required_evidence"], ["Therapy dates", "Clinical note"])
         self.assertEqual(payload["reviewer_status"], "reviewed")
         self.assertEqual(payload["source_file"], criterion["source_file"])
+
+    def test_case_audit_is_scoped_to_the_case_and_org_wide_audit_is_admin_only(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        admin_token = self._login(client, email="admin@test.authlens.local")
+        other_org_admin_id = self._create_test_user(
+            email="other-admin@test.authlens.local",
+            password="test-password",
+            role="admin",
+            organization_id="org_other_spine",
+            organization_name="Other Spine Clinic",
+        )
+        self.assertTrue(other_org_admin_id)
+        other_org_token = self._login(client, email="other-admin@test.authlens.local")
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-AUDIT")
+
+        case_audit_response = client.get(
+            f"/api/cases/{case_id}/audit",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(case_audit_response.status_code, 200, case_audit_response.text)
+        case_events = case_audit_response.json()["events"]
+        self.assertGreaterEqual(len(case_events), 1)
+        self.assertTrue(all(event["case_id"] == case_id for event in case_events))
+        self.assertIn("case.created", {event["action"] for event in case_events})
+        self.assertNotIn("patient document", str(case_events).lower())
+
+        cross_org_response = client.get(
+            f"/api/cases/{case_id}/audit",
+            headers={"Authorization": f"Bearer {other_org_token}"},
+        )
+        self.assertEqual(cross_org_response.status_code, 404)
+
+        org_audit_response = client.get("/api/audit", headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(org_audit_response.status_code, 200, org_audit_response.text)
+        org_events = org_audit_response.json()["events"]
+        self.assertIn("case.created", {event["action"] for event in org_events})
+
+        coordinator_org_audit_response = client.get(
+            "/api/audit",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(coordinator_org_audit_response.status_code, 403)
 
 
 if __name__ == "__main__":

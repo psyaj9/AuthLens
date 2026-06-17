@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from middlewares.exception_handlers import catch_exceptions
 from modules.config import get_allowed_origins
 from modules.schemas import ErrorResponse
+from routes.audit import router as audit_router
 from routes.auth import router as auth_router
 from routes.cases import router as cases_router
 from routes.criteria import router as criteria_router
@@ -40,6 +41,7 @@ app.middleware("http")(catch_exceptions)
 # Routers
 app.include_router(health_router, prefix="/api", tags=["Health"])
 app.include_router(auth_router, prefix="/api", tags=["Auth"])
+app.include_router(audit_router, prefix="/api", tags=["Audit"])
 app.include_router(cases_router, prefix="/api", tags=["Cases"])
 app.include_router(documents_router, prefix="/api", tags=["Documents"])
 app.include_router(criteria_router, prefix="/api", tags=["Criteria"])

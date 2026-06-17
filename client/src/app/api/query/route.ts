@@ -6,6 +6,7 @@ import {
   buildBackendHeaders,
   buildBackendUrl,
   getBackendApiUrl,
+  isCrossOriginMutation,
   normalizeBackendError,
   parseQaResponse
 } from "@/lib/server/backend-proxy";
@@ -45,6 +46,10 @@ function sanitizeSources(sources: string[]) {
 }
 
 export async function POST(request: Request) {
+  if (isCrossOriginMutation(request)) {
+    return errorResponse("Cross-origin requests are not allowed.", 403);
+  }
+
   const payload = await readQueryPayload(request).catch(() => null);
   const parsed = querySchema.safeParse(payload);
 

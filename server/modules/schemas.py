@@ -261,3 +261,20 @@ class CitationCheckResponse(BaseModel):
     citation_errors: list[dict]
     safe_to_show_user: bool
     created_at: datetime
+
+
+class AuditEventResponse(BaseModel):
+    id: str
+    organization_id: str
+    case_id: str | None = None
+    user_id: str | None = None
+    actor_type: str
+    action: str
+    entity_type: str
+    entity_id: str | None = None
+    metadata: dict
+    created_at: datetime
+
+
+class AuditEventListResponse(BaseModel):
+    events: list[AuditEventResponse]

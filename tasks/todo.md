@@ -1,3 +1,30 @@
+# Complete Phase 7 MVP Gate And PRD Re-Review
+
+- [ ] Re-read the PRD and map current implementation against remaining MVP/Phase 7 requirements.
+- [ ] Add organization-scoped audit read APIs for case audit and organization audit.
+- [ ] Add synthetic golden-case smoke fixtures and validation tests.
+- [ ] Add explicit red-team/safety tests for prompt injection, unsupported draft claims, tenant isolation, and synthetic-only guardrails.
+- [ ] Verify backend/client/deployment checks after the Phase 7 changes.
+- [ ] Summarize completed phases and PRD next-stage roadmap.
+
+## Review
+
+- Pending implementation and verification.
+
+# Harden Legacy Debug Proxy POST Routes
+
+- [x] Add failing cross-origin mutation tests for `/api/query` and `/api/upload`.
+- [x] Run focused client route tests and confirm the new tests fail for the missing guard.
+- [x] Reuse the prior-auth cross-origin rejection behavior in the legacy POST routes.
+- [x] Rerun focused client route tests.
+
+## Review
+
+- Added legacy query/upload route coverage for mismatched `Origin` and cross-site `Sec-Fetch-Site`, proving the routes return 403 and do not proxy to the backend.
+- Implemented a shared backend-proxy origin/fetch-metadata check and called it before body parsing in both legacy POST routes.
+- Red step: `npm test -- src/app/api/query/route.test.ts src/app/api/upload/route.test.ts` failed 4 new tests because the routes returned backend 502 errors instead of cross-origin 403.
+- Green step: focused route tests passed 12 tests; expanded focused proxy tests passed 19 tests across 3 files.
+
 # Fix Render Postgres Deployment Startup
 
 - [x] Confirm the Render traceback points to SQLAlchemy's Postgres driver import.

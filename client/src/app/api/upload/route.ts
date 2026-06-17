@@ -5,6 +5,7 @@ import {
   buildBackendHeaders,
   buildBackendUrl,
   getBackendApiUrl,
+  isCrossOriginMutation,
   normalizeBackendError,
   readJsonOrText
 } from "@/lib/server/backend-proxy";
@@ -25,6 +26,10 @@ function errorResponse(error: string, status: number) {
 }
 
 export async function POST(request: Request) {
+  if (isCrossOriginMutation(request)) {
+    return errorResponse("Cross-origin requests are not allowed.", 403);
+  }
+
   const incomingFormData = await request.formData().catch(() => null);
 
   if (!incomingFormData) {

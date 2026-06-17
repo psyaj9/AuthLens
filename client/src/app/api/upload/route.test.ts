@@ -49,6 +49,60 @@ describe("POST /api/upload", () => {
     expect(response.status).toBe(400);
   });
 
+  it("rejects mismatched Origin before proxying the upload", async () => {
+    process.env.BACKEND_API_URL = "https://backend.example.test";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File(["pdf"], "synthetic.pdf", { type: "application/pdf" });
+    const formData = new FormData();
+    formData.append("uploaded_files", file);
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/upload", {
+        method: "POST",
+        headers: {
+          Origin: "https://evil.example.test"
+        },
+        body: formData
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Cross-origin requests are not allowed."
+    });
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects cross-site fetch metadata before proxying the upload", async () => {
+    process.env.BACKEND_API_URL = "https://backend.example.test";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File(["pdf"], "synthetic.pdf", { type: "application/pdf" });
+    const formData = new FormData();
+    formData.append("uploaded_files", file);
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/upload", {
+        method: "POST",
+        headers: {
+          "Sec-Fetch-Site": "cross-site"
+        },
+        body: formData
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Cross-origin requests are not allowed."
+    });
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("returns a generic error when the backend upload fetch fails", async () => {
     process.env.BACKEND_API_URL = "https://backend.example.test";
     vi.stubGlobal(

@@ -44,6 +44,7 @@ STOPWORDS = {
     "with",
 }
 BANNED_DRAFT_TERMS = {"guaranteed approval", "must approve", "approved for coverage", "this patient qualifies"}
+REQUIRED_DRAFT_DISCLAIMER = "clinician review is required"
 
 
 def _case(db: Session, case_id: str, organization_id: str) -> PriorAuthCase:
@@ -600,6 +601,14 @@ def verify_citations(db: Session, *, draft_id: str, organization_id: str, user_i
                     "recommended_fix": "Use documentation-support wording only.",
                 }
             )
+    if REQUIRED_DRAFT_DISCLAIMER not in lowered:
+        unsupported_claims.append(
+            {
+                "claim": "human review disclaimer",
+                "issue": "Draft is missing the required human review disclaimer",
+                "recommended_fix": "Restore clinician review language before approval.",
+            }
+        )
     status_value = "pass" if not citation_errors and not unsupported_claims else "fail"
     check = CitationCheck(
         organization_id=organization_id,

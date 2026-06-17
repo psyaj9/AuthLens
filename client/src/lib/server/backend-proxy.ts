@@ -65,6 +65,17 @@ export function buildBackendHeaders(
   };
 }
 
+export function isCrossOriginMutation(request: Request) {
+  const origin = request.headers.get("origin");
+  const requestOrigin = new URL(request.url).origin;
+  if (origin && origin !== requestOrigin) {
+    return true;
+  }
+
+  const fetchSite = request.headers.get("sec-fetch-site");
+  return Boolean(fetchSite && fetchSite !== "same-origin" && fetchSite !== "none");
+}
+
 export async function readJsonOrText(response: Response) {
   const contentType = response.headers.get("content-type") ?? "";
 
