@@ -147,6 +147,7 @@ function LoginPanel({
           <label className="flex flex-col gap-2 text-sm font-semibold">
             Email
             <input
+              autoComplete="email"
               className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
               onChange={(event) => setEmail(event.target.value)}
               type="email"
@@ -156,6 +157,7 @@ function LoginPanel({
           <label className="flex flex-col gap-2 text-sm font-semibold">
             Password
             <input
+              autoComplete="current-password"
               className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
               onChange={(event) => setPassword(event.target.value)}
               type="password"
@@ -216,7 +218,10 @@ export function PriorAuthWorkspace() {
     getCurrentUser()
       .then((profile) => {
         setUser(profile);
-        return refreshCases();
+        if (profile) {
+          return refreshCases();
+        }
+        return undefined;
       })
       .catch(() => setUser(null));
   }, [refreshCases]);

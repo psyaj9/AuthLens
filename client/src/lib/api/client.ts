@@ -109,9 +109,9 @@ export async function logoutDemoUser(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST" });
 }
 
-export async function getCurrentUser(): Promise<UserProfile> {
+export async function getCurrentUser(): Promise<UserProfile | null> {
   const response = await fetch("/api/auth/me", { cache: "no-store" });
-  return parseLocalRouteResponse(response, userProfileSchema);
+  return parseLocalRouteResponse(response, userProfileSchema.nullable());
 }
 
 export async function listCases(): Promise<CaseSummary[]> {

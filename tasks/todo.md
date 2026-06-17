@@ -1,15 +1,18 @@
 # Implement PriorAuth Evidence Copilot MVP
 
 - [x] Run current backend/client baseline checks before implementation.
-- [ ] Add SQLAlchemy/Alembic-backed database foundation and seeded demo JWT auth.
-- [ ] Add organization-scoped case CRUD and typed document metadata/upload APIs.
-- [ ] Add case-scoped vector metadata, criteria extraction, evidence matching, readiness report, draft, and citation verification APIs.
-- [ ] Replace the first-screen client workspace with a prior-auth case workflow through server-side Next.js proxy routes.
-- [ ] Verify backend tests, client lint/type/test/build, and rendered workflow.
+- [x] Add SQLAlchemy/Alembic-backed database foundation and seeded demo JWT auth.
+- [x] Add organization-scoped case CRUD and typed document metadata/upload APIs.
+- [x] Add case-scoped vector metadata, criteria extraction, evidence matching, readiness report, draft, and citation verification APIs.
+- [x] Replace the first-screen client workspace with a prior-auth case workflow through server-side Next.js proxy routes.
+- [x] Verify backend tests, client lint/type/test/build, and rendered workflow.
 
 ## Review
 
 - Baseline before implementation: backend unittest, client lint, client typecheck, and client unit tests passed.
+- Added DB-backed prior-auth entities, Alembic migration scaffolding, demo seed command, JWT auth, organization scoping, audit events, typed documents, criteria, evidence, readiness, draft, and citation-check workflow APIs while keeping legacy Q&A routes.
+- Replaced the client first screen with the prior-auth workspace, routed browser calls through Next route handlers, added demo login behavior, and updated e2e coverage for the new first screen.
+- Verified with backend unittests, Alembic migration smoke, client lint/type/unit/build, Playwright desktop/mobile e2e, and a live browser render on local dev ports.
 
 # Fix client API proxy 503/502
 

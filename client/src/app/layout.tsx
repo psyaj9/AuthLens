@@ -3,7 +3,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AuthLens",
-  description: "Document question workspace for synthetic or de-identified PDFs."
+  description: "Prior authorization evidence workspace for synthetic or de-identified documents.",
+  icons: {
+    icon: "/icon.svg"
+  }
 };
 
 export default function RootLayout({

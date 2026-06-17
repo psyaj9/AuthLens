@@ -6,6 +6,8 @@ __pycache__/
 *.py[cod]
 server/app.log
 server/uploads/
+server/*.db
+.playwright-mcp/
 
 # Client dependencies and build artifacts
 node_modules/
