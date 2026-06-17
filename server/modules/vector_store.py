@@ -65,7 +65,10 @@ def get_pinecone_index():
             spec=spec
         )
         while not pinecone.indexes.describe(pinecone_index_name).status.ready:
-            print(f"Waiting for index {pinecone_index_name} to be ready...")
+            if is_production():
+                logger.info("Waiting for Pinecone index readiness.")
+            else:
+                logger.info(f"Waiting for index {pinecone_index_name} to be ready...")
             time.sleep(5)
 
     _pinecone_index = pinecone.index(pinecone_index_name)

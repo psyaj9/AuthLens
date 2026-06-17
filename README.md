@@ -85,7 +85,7 @@ Create a separate Vercel project for the frontend and set the Project Root Direc
 - `BACKEND_API_URL` as the Render backend base URL.
 - `INTERNAL_API_TOKEN` only if the backend requires it.
 
-The frontend worker should add or maintain `frontend/.env.example` with those variables.
+For local frontend work, set those values in your local shell or frontend-local env file only. Do not commit frontend env files.
 
 ## CI
 

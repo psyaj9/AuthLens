@@ -7,7 +7,7 @@
 - [x] Implement the approved AuthLens workspace UI with safety-edited demo copy.
 - [x] Add Vercel, Render, CircleCI, and environment documentation/configuration.
 - [x] Run security review and fix actionable findings.
-- [ ] Verify backend tests, frontend lint/type/test/build, and rendered workflow.
+- [x] Verify backend tests, frontend lint/type/test/build, and rendered workflow.
 
 ## Review
 
@@ -17,6 +17,7 @@
 - Added Render, Vercel, CircleCI, and local/deployment documentation/configuration.
 - Ran subagent reviews for backend/security, frontend/build, and deploy/CI/git hygiene; fixed wildcard CORS, source-path disclosure, PDF signature validation, unsafe filenames, production upload logging, health contract validation, order-dependent tests, and async accessibility announcements.
 - Verified backend with `.venv\Scripts\python.exe -m unittest discover tests` and frontend with `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`.
+- Verified rendered UI with Playwright: `npm run test:e2e` reported all 4 desktop/mobile tests as passed before the process hang, then controlled desktop and mobile screenshots were captured at `1440x960` and `390x844`.
 
 # Fix server logger startup failure
 
