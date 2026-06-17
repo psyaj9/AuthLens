@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from dependencies.auth import CurrentUser, get_current_user, require_roles
 from models.priorauth import PolicyCriterion
-from modules.schemas import CriteriaListResponse, CriterionResponse
-from services.priorauth_analysis import extract_criteria, list_criteria
+from modules.schemas import CriteriaListResponse, CriterionResponse, CriterionUpdateRequest
+from services.priorauth_analysis import extract_criteria, list_criteria, update_criterion
 
 
 router = APIRouter()
@@ -51,3 +51,20 @@ async def get_case_criteria(
 ):
     criteria = list_criteria(db, case_id=case_id, organization_id=current_user.organization_id)
     return CriteriaListResponse(criteria=[criterion_response(criterion) for criterion in criteria])
+
+
+@router.patch("/criteria/{criterion_id}", response_model=CriterionResponse)
+async def edit_criterion(
+    criterion_id: str,
+    payload: CriterionUpdateRequest,
+    current_user: CurrentUser = Depends(require_roles("admin", "clinician_reviewer")),
+    db: Session = Depends(get_db),
+):
+    criterion = update_criterion(
+        db,
+        criterion_id=criterion_id,
+        organization_id=current_user.organization_id,
+        user_id=current_user.user_id,
+        changes=payload.model_dump(exclude_unset=True),
+    )
+    return criterion_response(criterion)

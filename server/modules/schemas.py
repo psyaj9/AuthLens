@@ -165,6 +165,14 @@ class CriteriaListResponse(BaseModel):
     missing_or_ambiguous_policy_info: list[str] = Field(default_factory=list)
 
 
+class CriterionUpdateRequest(BaseModel):
+    requirement: str | None = None
+    required_evidence: list[str] | None = None
+    is_required: bool | None = None
+    ambiguity_notes: list[str] | None = None
+    reviewer_status: str | None = None
+
+
 class EvidenceMatchResponse(BaseModel):
     id: str
     criterion_id: str

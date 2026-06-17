@@ -7,6 +7,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from sqlalchemy.orm import Session
 
 from models.priorauth import Document, DocumentChunk, DocumentPage, PriorAuthCase
+from modules.config import format_upload_mb, get_max_upload_bytes, get_max_upload_mb
 from modules.vector_store import upsert_priorauth_chunks
 from services.audit import log_audit_event
 
@@ -73,6 +74,24 @@ def extract_pdf_pages(file_path: Path) -> list[tuple[int, str]]:
     return [(1, fallback)]
 
 
+def read_limited_upload(uploaded_file: UploadFile) -> bytes:
+    max_bytes = get_max_upload_bytes()
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = uploaded_file.file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File {safe_filename(uploaded_file.filename)} exceeds {format_upload_mb(get_max_upload_mb())} MB upload limit.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def create_case_document(
     db: Session,
     *,
@@ -83,7 +102,7 @@ def create_case_document(
 ) -> Document:
     document_type = validate_document_type(document_type)
     filename = safe_filename(uploaded_file.filename)
-    content = uploaded_file.file.read()
+    content = read_limited_upload(uploaded_file)
     if not content.startswith(PDF_SIGNATURE):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only valid PDF uploads are allowed.")
 

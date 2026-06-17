@@ -3,10 +3,14 @@ import { NextResponse } from "next/server";
 import {
   AUTH_COOKIE_NAME,
   errorResponse,
-  proxyBackendJson
+  proxyBackendJson,
+  rejectCrossOriginMutation
 } from "@/lib/server/priorauth-proxy";
 
 export async function POST(request: Request) {
+  const crossOriginResponse = rejectCrossOriginMutation(request);
+  if (crossOriginResponse) return crossOriginResponse;
+
   const body = await request.text();
   const response = await proxyBackendJson(request, "/api/auth/login", {
     method: "POST",

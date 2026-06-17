@@ -100,6 +100,26 @@ def _short_quote(text: str, limit: int = 220) -> str:
     return normalized[:limit]
 
 
+def _effective_match_status(match: EvidenceMatch) -> str:
+    return match.reviewer_override_status or match.status
+
+
+def _has_required_citation(match: EvidenceMatch) -> bool:
+    return all(
+        value.strip()
+        for value in [
+            match.source_file,
+            match.source_page,
+            match.source_quote,
+            match.why_it_matters,
+        ]
+    )
+
+
+def _is_citation_backed_met(match: EvidenceMatch) -> bool:
+    return _effective_match_status(match) == "met" and _has_required_citation(match)
+
+
 def extract_criteria(db: Session, *, case_id: str, organization_id: str, user_id: str) -> list[PolicyCriterion]:
     case = _case(db, case_id, organization_id)
     policy_chunks = _chunks(
@@ -179,6 +199,46 @@ def list_criteria(db: Session, *, case_id: str, organization_id: str) -> list[Po
             .order_by(PolicyCriterion.criterion_code)
         )
     )
+
+
+def update_criterion(
+    db: Session,
+    *,
+    criterion_id: str,
+    organization_id: str,
+    user_id: str,
+    changes: dict,
+) -> PolicyCriterion:
+    criterion = db.scalar(
+        select(PolicyCriterion).where(
+            PolicyCriterion.id == criterion_id,
+            PolicyCriterion.organization_id == organization_id,
+        )
+    )
+    if criterion is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Criterion not found")
+
+    allowed_fields = {"requirement", "required_evidence", "is_required", "ambiguity_notes", "reviewer_status"}
+    applied_fields = []
+    for field, value in changes.items():
+        if field in allowed_fields:
+            setattr(criterion, field, value)
+            applied_fields.append(field)
+    if applied_fields:
+        criterion.extraction_version += 1
+    log_audit_event(
+        db,
+        organization_id=organization_id,
+        case_id=criterion.case_id,
+        user_id=user_id,
+        action="criteria.updated",
+        entity_type="policy_criterion",
+        entity_id=criterion.id,
+        metadata={"updated_fields": sorted(applied_fields), "extraction_version": criterion.extraction_version},
+    )
+    db.commit()
+    db.refresh(criterion)
+    return criterion
 
 
 def match_evidence(db: Session, *, case_id: str, organization_id: str, user_id: str) -> list[EvidenceMatch]:
@@ -302,6 +362,11 @@ def update_match_override(
     )
     if match is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence match not found")
+    if status_value == "met" and not _has_required_citation(match):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A met override requires source quote, file, page, and rationale",
+        )
     match.reviewer_override_status = status_value
     match.reviewer_override_reason = reason
     log_audit_event(
@@ -334,8 +399,8 @@ def generate_readiness_report(db: Session, *, case_id: str, organization_id: str
         weight = 2.0 if criterion.is_required else 1.0
         possible += weight
         match = matches_by_criterion.get(criterion.id)
-        status_value = match.reviewer_override_status if match and match.reviewer_override_status else (match.status if match else "not_found")
-        if status_value == "met":
+        status_value = _effective_match_status(match) if match else "not_found"
+        if match is not None and _is_citation_backed_met(match):
             earned += weight
         elif status_value == "unclear":
             earned += weight * 0.5
@@ -346,12 +411,8 @@ def generate_readiness_report(db: Session, *, case_id: str, organization_id: str
     score = floor(100 * earned / possible) if possible else 0
     if score >= 85 and not missing_items:
         overall_status = "ready_for_review"
-    elif score >= 60:
-        overall_status = "needs_more_documentation"
-    elif score >= 30:
-        overall_status = "high_risk_of_denial"
     else:
-        overall_status = "insufficient_information"
+        overall_status = "needs_more_documentation"
 
     run = AnalysisRun(
         organization_id=organization_id,
@@ -363,7 +424,7 @@ def generate_readiness_report(db: Session, *, case_id: str, organization_id: str
     db.add(run)
     db.flush()
     report_json = {
-        "met_count": sum(1 for match in matches if match.status == "met"),
+        "met_count": sum(1 for match in matches if _is_citation_backed_met(match)),
         "missing_or_unclear_items": missing_items,
         "score_interpretation": "documentation completeness only",
     }
@@ -411,7 +472,11 @@ def latest_report(db: Session, *, case_id: str, organization_id: str) -> Readine
 def create_prior_auth_draft(db: Session, *, case_id: str, organization_id: str, user_id: str) -> DraftLetter:
     case = _case(db, case_id, organization_id)
     report = latest_report(db, case_id=case.id, organization_id=organization_id)
-    matches = [match for match in list_matches(db, case_id=case.id, organization_id=organization_id) if match.status == "met"]
+    matches = [
+        match
+        for match in list_matches(db, case_id=case.id, organization_id=organization_id)
+        if _is_citation_backed_met(match)
+    ]
     lines = [
         f"Subject: Prior authorization request for {case.requested_service}",
         "",
@@ -508,7 +573,7 @@ def verify_citations(db: Session, *, draft_id: str, organization_id: str, user_i
     valid_citations = {
         f"{match.source_file}, page {match.source_page}".lower()
         for match in matches
-        if match.status == "met" and match.source_file and match.source_page
+        if _is_citation_backed_met(match)
     }
     found_citations = {citation.lower() for citation in re.findall(r"\[([^\]]+)\]", draft.content_markdown)}
     citation_errors = [
@@ -570,6 +635,8 @@ def approve_draft(db: Session, *, draft_id: str, organization_id: str, user_id: 
         .where(CitationCheck.draft_letter_id == draft.id, CitationCheck.organization_id == organization_id)
         .order_by(CitationCheck.created_at.desc())
     )
+    if draft.status != "ready_for_review":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Draft must be citation-verified after the latest edit")
     if latest_check is None or latest_check.verification_status != "pass":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Citation verification must pass before approval")
     draft.status = "approved"

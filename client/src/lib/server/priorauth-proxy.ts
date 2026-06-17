@@ -43,6 +43,21 @@ export function errorResponse(error: string, status: number) {
   return NextResponse.json({ error }, { status });
 }
 
+export function rejectCrossOriginMutation(request: Request) {
+  const origin = request.headers.get("origin");
+  const requestOrigin = new URL(request.url).origin;
+  if (origin && origin !== requestOrigin) {
+    return errorResponse("Cross-origin requests are not allowed.", 403);
+  }
+
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") {
+    return errorResponse("Cross-origin requests are not allowed.", 403);
+  }
+
+  return null;
+}
+
 export async function proxyBackendJson(
   request: Request,
   path: string,

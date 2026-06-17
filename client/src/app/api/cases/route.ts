@@ -1,4 +1,4 @@
-import { authHeaders, proxyBackendJson } from "@/lib/server/priorauth-proxy";
+import { authHeaders, proxyBackendJson, rejectCrossOriginMutation } from "@/lib/server/priorauth-proxy";
 
 export async function GET(request: Request) {
   return proxyBackendJson(request, "/api/cases", {
@@ -8,6 +8,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const crossOriginResponse = rejectCrossOriginMutation(request);
+  if (crossOriginResponse) return crossOriginResponse;
+
   return proxyBackendJson(request, "/api/cases", {
     method: "POST",
     body: await request.text(),

@@ -1,4 +1,4 @@
-import { authHeaders, proxyBackendJson } from "@/lib/server/priorauth-proxy";
+import { authHeaders, proxyBackendJson, rejectCrossOriginMutation } from "@/lib/server/priorauth-proxy";
 
 export const runtime = "nodejs";
 
@@ -15,6 +15,9 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
+  const crossOriginResponse = rejectCrossOriginMutation(request);
+  if (crossOriginResponse) return crossOriginResponse;
+
   const { caseId } = await context.params;
   const body = await request.formData();
   return proxyBackendJson(request, `/api/cases/${caseId}/documents`, {

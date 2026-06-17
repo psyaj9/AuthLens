@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from dependencies.auth import CurrentUser, get_current_user, require_roles
-from models.priorauth import EvidenceMatch, PolicyCriterion, PriorAuthCase
+from models.priorauth import EvidenceMatch, OrganizationMembership, PolicyCriterion, PriorAuthCase
 from modules.schemas import CaseCreate, CaseListResponse, CaseResponse, CaseUpdate
 from services.audit import log_audit_event
 
@@ -58,6 +58,23 @@ def get_case_for_user(db: Session, case_id: str, current_user: CurrentUser) -> P
     return case
 
 
+def validate_assignee(db: Session, assigned_to_user_id: str | None, organization_id: str) -> str | None:
+    if assigned_to_user_id is None:
+        return None
+    membership = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.user_id == assigned_to_user_id,
+            OrganizationMembership.organization_id == organization_id,
+        )
+    )
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assigned user must belong to the current organization",
+        )
+    return assigned_to_user_id
+
+
 @router.post("/cases", response_model=CaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_case(
     payload: CaseCreate,
@@ -67,7 +84,7 @@ async def create_case(
     case = PriorAuthCase(
         organization_id=current_user.organization_id,
         created_by_user_id=current_user.user_id,
-        assigned_to_user_id=payload.assigned_to_user_id,
+        assigned_to_user_id=validate_assignee(db, payload.assigned_to_user_id, current_user.organization_id),
         patient_label=payload.patient_label,
         payer_name=payload.payer_name,
         plan_name=payload.plan_name,
@@ -128,7 +145,14 @@ async def update_case(
     db: Session = Depends(get_db),
 ):
     case = get_case_for_user(db, case_id, current_user)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if "assigned_to_user_id" in changes:
+        changes["assigned_to_user_id"] = validate_assignee(
+            db,
+            changes["assigned_to_user_id"],
+            current_user.organization_id,
+        )
+    for field, value in changes.items():
         setattr(case, field, value)
     log_audit_event(
         db,
@@ -138,7 +162,7 @@ async def update_case(
         action="case.updated",
         entity_type="case",
         entity_id=case.id,
-        metadata={"updated_fields": sorted(payload.model_dump(exclude_unset=True))},
+        metadata={"updated_fields": sorted(changes)},
     )
     db.commit()
     db.refresh(case)
