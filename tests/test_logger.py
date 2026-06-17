@@ -24,8 +24,15 @@ class LoggerImportTests(unittest.TestCase):
                 for handler in module.logger.handlers
                 if hasattr(handler, "baseFilename")
             ]
+            stream_handlers = [
+                handler
+                for handler in module.logger.handlers
+                if isinstance(handler, module.logging.StreamHandler)
+                and not hasattr(handler, "baseFilename")
+            ]
 
             self.assertTrue(file_handlers)
+            self.assertTrue(stream_handlers)
             self.assertEqual(
                 Path(file_handlers[0].baseFilename),
                 server_dir / "app.log",

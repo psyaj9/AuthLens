@@ -66,3 +66,19 @@
 - Kept `SimpleRetriever` internal so the API only needs `user_query` from Postman.
 - Added route coverage proving `POST /api/queries/` accepts only `user_query`.
 - Verified with `.venv\Scripts\python.exe -m unittest tests.test_queries_route tests.test_app_startup tests.test_vector_store`.
+
+# Print query responses and fix LangChain deprecation
+
+- [x] Confirm deprecated call site and current LangChain replacement.
+- [x] Add coverage that `handle_query_chain` uses `invoke()` and logs query/response.
+- [x] Add console logging so query and LLM response appear in the server console.
+- [x] Verify focused query handler/logger tests.
+
+## Review
+
+- Replaced deprecated `chain({"query": user_query})` with `chain.invoke({"query": user_query})`.
+- Logged the exact user query and final LLM response at INFO level.
+- Added a console stream handler so app logs appear in the uvicorn terminal as well as `server/app.log`.
+- Closed existing logger handlers before reconfiguration to avoid duplicate handlers and file-handle leaks during imports.
+- Added regression coverage for the query handler and console logger setup.
+- Verified with `.venv\Scripts\python.exe -m unittest tests.test_query_handler tests.test_logger tests.test_queries_route tests.test_app_startup`.
