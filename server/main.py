@@ -6,8 +6,12 @@ from modules.config import get_allowed_origins
 from modules.schemas import ErrorResponse
 from routes.auth import router as auth_router
 from routes.cases import router as cases_router
+from routes.criteria import router as criteria_router
+from routes.drafts import router as drafts_router
 from routes.documents import router as documents_router
+from routes.evidence import router as evidence_router
 from routes.health import router as health_router
+from routes.reports import router as reports_router
 from routes.upload_pdf import router as upload_router
 from routes.queries import router as query_router
 
@@ -38,5 +42,9 @@ app.include_router(health_router, prefix="/api", tags=["Health"])
 app.include_router(auth_router, prefix="/api", tags=["Auth"])
 app.include_router(cases_router, prefix="/api", tags=["Cases"])
 app.include_router(documents_router, prefix="/api", tags=["Documents"])
+app.include_router(criteria_router, prefix="/api", tags=["Criteria"])
+app.include_router(evidence_router, prefix="/api", tags=["Evidence"])
+app.include_router(reports_router, prefix="/api", tags=["Reports"])
+app.include_router(drafts_router, prefix="/api", tags=["Drafts"])
 app.include_router(upload_router, prefix="/api", tags=["Upload PDF"])
 app.include_router(query_router, prefix="/api", tags=["Queries"])

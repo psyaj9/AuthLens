@@ -43,7 +43,7 @@ STOPWORDS = {
     "the",
     "with",
 }
-BANNED_DRAFT_TERMS = {"guaranteed approval", "must approve", "approved for coverage", "diagnose", "treatment recommendation"}
+BANNED_DRAFT_TERMS = {"guaranteed approval", "must approve", "approved for coverage", "this patient qualifies"}
 
 
 def _case(db: Session, case_id: str, organization_id: str) -> PriorAuthCase:
