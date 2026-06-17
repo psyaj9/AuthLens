@@ -1,3 +1,16 @@
+# Implement PriorAuth Evidence Copilot MVP
+
+- [x] Run current backend/client baseline checks before implementation.
+- [ ] Add SQLAlchemy/Alembic-backed database foundation and seeded demo JWT auth.
+- [ ] Add organization-scoped case CRUD and typed document metadata/upload APIs.
+- [ ] Add case-scoped vector metadata, criteria extraction, evidence matching, readiness report, draft, and citation verification APIs.
+- [ ] Replace the first-screen client workspace with a prior-auth case workflow through server-side Next.js proxy routes.
+- [ ] Verify backend tests, client lint/type/test/build, and rendered workflow.
+
+## Review
+
+- Baseline before implementation: backend unittest, client lint, client typecheck, and client unit tests passed.
+
 # Fix client API proxy 503/502
 
 - [x] Inspect client proxy routes and backend health/upload handlers.
