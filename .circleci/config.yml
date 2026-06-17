@@ -1,0 +1,81 @@
+version: 2.1
+
+jobs:
+  backend-test:
+    docker:
+      - image: cimg/python:3.12
+    working_directory: ~/project
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - v1-python-pip-{{ checksum "server/requirements.txt" }}
+
+      - run:
+          name: Install backend dependencies
+          command: |
+            python -m pip install --upgrade pip
+            python -m pip install --cache-dir ~/.cache/pip -r server/requirements.txt
+
+      - save_cache:
+          key: v1-python-pip-{{ checksum "server/requirements.txt" }}
+          paths:
+            - ~/.cache/pip
+
+      - run:
+          name: Run backend unit tests
+          command: python -m unittest discover tests
+
+  frontend-test-build:
+    docker:
+      - image: cimg/node:22.16
+    working_directory: ~/project
+    steps:
+      - checkout
+
+      - run:
+          name: Verify planned frontend workspace exists
+          command: |
+            test -f frontend/package.json
+            test -f frontend/package-lock.json
+
+      - restore_cache:
+          keys:
+            - v1-npm-{{ checksum "frontend/package-lock.json" }}
+
+      - run:
+          name: Install frontend dependencies
+          working_directory: ~/project/frontend
+          command: npm ci --cache ~/.npm --prefer-offline
+
+      - save_cache:
+          key: v1-npm-{{ checksum "frontend/package-lock.json" }}
+          paths:
+            - ~/.npm
+
+      - run:
+          name: Lint frontend
+          working_directory: ~/project/frontend
+          command: npm run lint
+
+      - run:
+          name: Type-check frontend
+          working_directory: ~/project/frontend
+          command: npm run typecheck
+
+      - run:
+          name: Test frontend
+          working_directory: ~/project/frontend
+          command: npm run test
+
+      - run:
+          name: Build frontend
+          working_directory: ~/project/frontend
+          command: npm run build
+
+workflows:
+  test-and-build:
+    jobs:
+      - backend-test
+      - frontend-test-build

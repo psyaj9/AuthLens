@@ -88,6 +88,36 @@ class VectorStoreTests(unittest.TestCase):
         self.assertEqual(vectors[0][2]["text"], "First chunk")
         self.assertEqual(vectors[0][2]["source"], "doc.pdf")
 
+    def test_load_vector_store_removes_saved_upload_after_indexing(self):
+        document = SimpleNamespace(page_content="First chunk", metadata={"source": "doc.pdf"})
+        upload = SimpleNamespace(
+            filename="doc.pdf",
+            file=SimpleNamespace(read=lambda: b"%PDF-test"),
+        )
+        index = MagicMock()
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            self.vector_store, "UPLOAD_DIR", Path(tmpdir)
+        ), patch.object(
+            self.vector_store, "get_pinecone_index", return_value=(index, "authlens-test")
+        ), patch.object(
+            self.vector_store, "PyPDFLoader"
+        ) as loader_cls, patch.object(
+            self.vector_store, "RecursiveCharacterTextSplitter"
+        ) as splitter_cls, patch.object(
+            self.vector_store, "GoogleGenerativeAIEmbeddings"
+        ) as embeddings_cls, patch.object(
+            self.vector_store, "tqdm"
+        ) as tqdm_cls:
+            loader_cls.return_value.load.return_value = [document]
+            splitter_cls.return_value.split_documents.return_value = [document]
+            embeddings_cls.return_value.embed_documents.return_value = [[0.1, 0.2, 0.3]]
+            tqdm_cls.return_value.__enter__.return_value = MagicMock()
+
+            self.vector_store.load_vector_store([upload])
+
+            self.assertFalse((Path(tmpdir) / "doc.pdf").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

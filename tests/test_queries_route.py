@@ -54,7 +54,10 @@ class QueryRouteTests(unittest.TestCase):
         ), patch.object(
             queries_module,
             "handle_query_chain",
-            return_value={"answer": "Diabetes is a chronic condition."},
+            return_value={
+                "response": "Diabetes is a chronic condition.",
+                "source_documents": ["DIABETES.pdf"],
+            },
         ):
             response = client.post(
                 "/api/queries/",
@@ -64,7 +67,10 @@ class QueryRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"answer": "Diabetes is a chronic condition."},
+            {
+                "response": "Diabetes is a chronic condition.",
+                "source_documents": ["DIABETES.pdf"],
+            },
         )
 
     def test_queries_returns_500_when_chain_processing_fails(self):

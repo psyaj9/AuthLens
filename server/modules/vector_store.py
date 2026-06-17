@@ -79,40 +79,50 @@ def get_embeddings():
 
 # Load and process documents
 
+def _safe_upload_filename(filename: str | None) -> str:
+    if filename is None or not filename.strip():
+        raise ValueError("Uploaded file must have a filename")
+
+    return Path(filename.strip()).name
+
+
 def load_vector_store(uploaded_files):
     pinecone_index, pinecone_index_name = get_pinecone_index()
     embeddings = get_embeddings()
-    filepath = []
-    
+    filepaths = []
 
-    for file in uploaded_files:
-        save_path = Path(UPLOAD_DIR) / file.filename
-        with open(save_path, "wb") as f:
-            f.write(file.file.read())
-        filepath.append(str(save_path))
-    
-    for file_path in filepath:
-        loader = PyPDFLoader(file_path)
-        documents = loader.load()
+    try:
+        for file in uploaded_files:
+            save_path = Path(UPLOAD_DIR) / _safe_upload_filename(file.filename)
+            with open(save_path, "wb") as f:
+                f.write(file.file.read())
+            filepaths.append(save_path)
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-        text_chunks = text_splitter.split_documents(documents)
-        
-        texts = [chunk.page_content for chunk in text_chunks]
-        metadata = [
-            {**chunk.metadata, "text": chunk.page_content}
-            for chunk in text_chunks
-        ]
-        vector_ids = [f"{Path(file_path).stem}-{i}" for i in range(len(text_chunks))]
+        for file_path in filepaths:
+            loader = PyPDFLoader(str(file_path))
+            documents = loader.load()
 
-        embedding = embeddings.embed_documents(texts)
-        vectors = [
-            (vector_id, values, item_metadata)
-            for vector_id, values, item_metadata in zip(vector_ids, embedding, metadata)
-        ]
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+            text_chunks = text_splitter.split_documents(documents)
 
-        with tqdm(total=len(embedding), desc=f"Uploading {Path(file_path).name} to Pinecone") as pbar:
-            pinecone_index.upsert(vectors=vectors)
-            pbar.update(len(embedding))
+            texts = [chunk.page_content for chunk in text_chunks]
+            metadata = [
+                {**chunk.metadata, "text": chunk.page_content}
+                for chunk in text_chunks
+            ]
+            vector_ids = [f"{file_path.stem}-{i}" for i in range(len(text_chunks))]
 
-        print(f"Uploaded {len(embedding)} vectors for {Path(file_path).name} to Pinecone index {pinecone_index_name}.")
+            embedding = embeddings.embed_documents(texts)
+            vectors = [
+                (vector_id, values, item_metadata)
+                for vector_id, values, item_metadata in zip(vector_ids, embedding, metadata)
+            ]
+
+            with tqdm(total=len(embedding), desc=f"Uploading {file_path.name} to Pinecone") as pbar:
+                pinecone_index.upsert(vectors=vectors)
+                pbar.update(len(embedding))
+
+            print(f"Uploaded {len(embedding)} vectors for {file_path.name} to Pinecone index {pinecone_index_name}.")
+    finally:
+        for file_path in filepaths:
+            file_path.unlink(missing_ok=True)

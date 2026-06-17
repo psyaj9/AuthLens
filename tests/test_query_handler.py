@@ -1,8 +1,10 @@
 import importlib
+import os
 import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 
 class QueryHandlerTests(unittest.TestCase):
@@ -70,6 +72,34 @@ class QueryHandlerTests(unittest.TestCase):
                 )
 
         self.assertIn("Error handling query: Missing some input keys", logs.output[0])
+
+    def test_handle_query_chain_suppresses_query_and_response_text_in_production(self):
+        class Chain:
+            def invoke(self, payload):
+                return {
+                    "result": "Diabetes is a chronic condition.",
+                    "source_documents": [
+                        SimpleNamespace(metadata={"source": "DIABETES.pdf"})
+                    ],
+                }
+
+        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
+            with self.assertLogs(self.query_handler.logger, level="INFO") as logs:
+                response = self.query_handler.handle_query_chain(
+                    Chain(),
+                    "what is diabetes?",
+                )
+
+        self.assertEqual(
+            response,
+            {
+                "response": "Diabetes is a chronic condition.",
+                "source_documents": ["DIABETES.pdf"],
+            },
+        )
+        log_text = "\n".join(logs.output)
+        self.assertNotIn("what is diabetes?", log_text)
+        self.assertNotIn("Diabetes is a chronic condition.", log_text)
 
 
 if __name__ == "__main__":

@@ -4,3 +4,20 @@ __pycache__/
 *.py[cod]
 server/app.log
 server/uploads/
+
+# Frontend dependencies and build artifacts
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/test-results/
+frontend/playwright-report/
+frontend/coverage/
+frontend/tsconfig.tsbuildinfo
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.turbo/

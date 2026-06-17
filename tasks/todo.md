@@ -1,3 +1,18 @@
+# Build Next.js frontend and production deployment binding
+
+- [ ] Confirm baseline repo state and existing frontend directory status.
+- [ ] Harden FastAPI backend for production frontend binding.
+- [ ] Add stable API contracts, health check, upload validation, and internal token guard.
+- [ ] Build a Next.js frontend with server-side proxy route handlers.
+- [ ] Implement the approved AuthLens workspace UI with safety-edited demo copy.
+- [ ] Add Vercel, Render, CircleCI, and environment documentation/configuration.
+- [ ] Run security review and fix actionable findings.
+- [ ] Verify backend tests, frontend lint/type/test/build, and rendered workflow.
+
+## Review
+
+- Pending implementation and verification.
+
 # Fix server logger startup failure
 
 - [x] Confirm root cause from traceback and local logger setup.
