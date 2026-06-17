@@ -145,3 +145,43 @@ def load_vector_store(uploaded_files):
     finally:
         for file_path in filepaths:
             file_path.unlink(missing_ok=True)
+
+
+def upsert_priorauth_chunks(chunks: list[dict[str, Any]]) -> None:
+    if not chunks:
+        return
+
+    required_env = [
+        "GOOGLE_API_KEY",
+        "PINECONE_API_KEY",
+        "PINECONE_ENVIRONMENT",
+        "PINECONE_INDEX_NAME",
+    ]
+    if any(os.getenv(name) is None for name in required_env):
+        logger.info("Skipping Pinecone upsert for prior-auth chunks; vector store is not configured.")
+        return
+
+    pinecone_index, pinecone_index_name = get_pinecone_index()
+    embeddings = get_embeddings()
+    texts = [str(chunk.get("text", "")) for chunk in chunks]
+    embedded_texts = embeddings.embed_documents(texts)
+    vectors = []
+    for chunk, values in zip(chunks, embedded_texts):
+        metadata = {
+            "organization_id": chunk["organization_id"],
+            "case_id": chunk["case_id"],
+            "document_id": chunk["document_id"],
+            "document_type": chunk["document_type"],
+            "chunk_id": chunk["id"],
+            "source_file": chunk["file_name"],
+            "page_start": chunk["page_start"],
+            "page_end": chunk["page_end"],
+            "chunk_index": chunk["chunk_index"],
+            "text": chunk["text"],
+        }
+        vectors.append((chunk["vector_id"], values, metadata))
+
+    pinecone_index.upsert(vectors=vectors, namespace=str(chunks[0]["organization_id"]))
+    logger.info(
+        f"Uploaded {len(vectors)} prior-auth vectors to Pinecone index {pinecone_index_name}."
+    )

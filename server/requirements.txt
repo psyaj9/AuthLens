@@ -20,3 +20,6 @@ requests
 tqdm
 
 loguru
+
+SQLAlchemy
+alembic
