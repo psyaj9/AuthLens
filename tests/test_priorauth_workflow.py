@@ -27,6 +27,9 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         os.environ.update(self.env_patch)
 
     def tearDown(self):
+        session = sys.modules.get("db.session")
+        if session is not None:
+            session.dispose_engine()
         self._clear_server_modules()
         for key, value in self._original_env.items():
             if value is None:
@@ -165,6 +168,96 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(payload["document_type"], "payer_policy")
         self.assertEqual(payload["processing_status"], "indexed")
         self.assertEqual(payload["page_count"], 1)
+
+    def test_priorauth_analysis_generates_evidence_report_draft_and_citation_check(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        clinician_token = self._login(client, email="clinician@demo.authlens.test")
+        case_response = client.post(
+            "/api/cases",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+            json={
+                "patient_label": "SYN-LMRI-004",
+                "payer_name": "Example Health Plan",
+                "specialty": "Radiology",
+                "requested_service": "Lumbar spine MRI",
+                "case_type": "prior_auth",
+            },
+        )
+        case_id = case_response.json()["id"]
+        for document_type, name, body in [
+            (
+                "payer_policy",
+                "policy.pdf",
+                b"%PDF-1.4\nCoverage requires six weeks of conservative therapy. Functional limitation must be documented.",
+            ),
+            (
+                "patient_note",
+                "note.pdf",
+                b"%PDF-1.4\nThe provided documents indicate six weeks of conservative therapy and functional limitation with walking.",
+            ),
+        ]:
+            response = client.post(
+                f"/api/cases/{case_id}/documents",
+                headers={"Authorization": f"Bearer {coordinator_token}"},
+                data={"document_type": document_type},
+                files={"file": (name, body, "application/pdf")},
+            )
+            self.assertEqual(response.status_code, 201, response.text)
+
+        criteria_response = client.post(
+            f"/api/cases/{case_id}/criteria/extract",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(criteria_response.status_code, 200, criteria_response.text)
+        criteria = criteria_response.json()["criteria"]
+        self.assertGreaterEqual(len(criteria), 2)
+        self.assertTrue(all(item["source_file"] == "policy.pdf" for item in criteria))
+
+        evidence_response = client.post(
+            f"/api/cases/{case_id}/evidence/match",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(evidence_response.status_code, 200, evidence_response.text)
+        matches = evidence_response.json()["matches"]
+        self.assertEqual(len(matches), len(criteria))
+        self.assertIn("met", {match["status"] for match in matches})
+        for match in matches:
+            if match["status"] == "met":
+                self.assertEqual(match["source_file"], "note.pdf")
+                self.assertTrue(match["source_quote"])
+
+        report_response = client.post(
+            f"/api/cases/{case_id}/reports/readiness",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(report_response.status_code, 200, report_response.text)
+        report = report_response.json()
+        self.assertGreater(report["readiness_score"], 0)
+        self.assertIn("documentation completeness", report["summary"])
+
+        draft_response = client.post(
+            f"/api/cases/{case_id}/drafts/prior-auth",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(draft_response.status_code, 200, draft_response.text)
+        draft = draft_response.json()
+        self.assertIn("Clinician review is required", draft["content_markdown"])
+        self.assertNotIn("guaranteed", draft["content_markdown"].lower())
+
+        check_response = client.post(
+            f"/api/drafts/{draft['id']}/verify-citations",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(check_response.status_code, 200, check_response.text)
+        self.assertEqual(check_response.json()["verification_status"], "pass")
+
+        approve_response = client.post(
+            f"/api/drafts/{draft['id']}/approve",
+            headers={"Authorization": f"Bearer {clinician_token}"},
+        )
+        self.assertEqual(approve_response.status_code, 200, approve_response.text)
+        self.assertEqual(approve_response.json()["status"], "approved")
 
 
 if __name__ == "__main__":

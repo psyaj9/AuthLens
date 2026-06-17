@@ -151,6 +151,10 @@ def upsert_priorauth_chunks(chunks: list[dict[str, Any]]) -> None:
     if not chunks:
         return
 
+    if os.getenv("ENVIRONMENT", "").strip().lower() == "test":
+        logger.info("Skipping Pinecone upsert for prior-auth chunks in test environment.")
+        return
+
     required_env = [
         "GOOGLE_API_KEY",
         "PINECONE_API_KEY",

@@ -41,3 +41,7 @@ def get_db() -> Iterator[Session]:
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+
+
+def dispose_engine() -> None:
+    engine.dispose()
