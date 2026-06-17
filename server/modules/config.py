@@ -26,6 +26,9 @@ def get_allowed_origins() -> list[str]:
         for origin in configured_origins.split(",")
         if origin.strip()
     ]
+    if "*" in origins:
+        raise RuntimeError("ALLOWED_ORIGINS cannot include wildcard when credentials are enabled")
+
     return origins or list(DEFAULT_ALLOWED_ORIGINS)
 
 

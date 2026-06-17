@@ -32,7 +32,11 @@ export function QuestionWorkspace({
   status
 }: QuestionWorkspaceProps) {
   return (
-    <Panel className="flex min-h-[520px] flex-col" labelledBy="workspace-heading">
+    <Panel
+      aria-busy={status === "loading"}
+      className="flex min-h-[520px] flex-col"
+      labelledBy="workspace-heading"
+    >
       <PanelHeader
         action={<StatusPill tone={queryTone(status)}>Answer</StatusPill>}
         id="workspace-heading"
@@ -78,7 +82,11 @@ export function QuestionWorkspace({
           </p>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col rounded-md border border-[var(--border)] bg-[#fbfcfb]">
+        <div
+          aria-live="polite"
+          className="flex min-h-0 flex-1 flex-col rounded-md border border-[var(--border)] bg-[#fbfcfb]"
+          role="status"
+        >
           <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3 text-sm font-semibold">
             <MessageSquareText aria-hidden className="h-4 w-4 text-[var(--accent)]" />
             Answer

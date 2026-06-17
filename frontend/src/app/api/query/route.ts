@@ -34,6 +34,16 @@ function errorResponse(error: string, status: number) {
   return NextResponse.json({ error }, { status });
 }
 
+function safeSourceLabel(source: string) {
+  const normalized = source.replace(/\\/g, "/");
+  const label = normalized.split("/").filter(Boolean).pop();
+  return label || "Unknown source";
+}
+
+function sanitizeSources(sources: string[]) {
+  return Array.from(new Set(sources.map(safeSourceLabel)));
+}
+
 export async function POST(request: Request) {
   const payload = await readQueryPayload(request).catch(() => null);
   const parsed = querySchema.safeParse(payload);
@@ -69,12 +79,12 @@ export async function POST(request: Request) {
     }
 
     const responsePayload = await backendResponse.json();
-    return NextResponse.json(parseQaResponse(responsePayload));
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "AuthLens could not reach the backend.";
-    return errorResponse(message, 502);
+    const parsedResponse = parseQaResponse(responsePayload);
+    return NextResponse.json({
+      ...parsedResponse,
+      source_documents: sanitizeSources(parsedResponse.source_documents)
+    });
+  } catch {
+    return errorResponse("AuthLens could not reach the backend.", 502);
   }
 }

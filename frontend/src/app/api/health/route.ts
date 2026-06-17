@@ -9,6 +9,17 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function isBackendHealthPayload(payload: unknown) {
+  return (
+    payload !== null &&
+    typeof payload === "object" &&
+    "status" in payload &&
+    payload.status === "ok" &&
+    "service" in payload &&
+    payload.service === "authlens-api"
+  );
+}
+
 export async function GET() {
   const backendApiUrl = getBackendApiUrl();
 
@@ -29,19 +40,21 @@ export async function GET() {
   const timeout = setTimeout(() => controller.abort(), 3000);
 
   try {
-    const response = await fetch(buildBackendUrl(backendApiUrl, "/docs"), {
+    const response = await fetch(buildBackendUrl(backendApiUrl, "/api/health/"), {
       method: "GET",
       headers: buildBackendHeaders(),
       cache: "no-store",
       signal: controller.signal
     });
-    const backendReachable = response.status < 500;
+    const payload = await response.json().catch(() => null);
+    const backendReachable = response.ok && isBackendHealthPayload(payload);
 
     return NextResponse.json(
       {
         ok: backendReachable,
         backendConfigured: true,
-        backendReachable
+        backendReachable,
+        error: backendReachable ? undefined : "Backend health check failed."
       },
       { status: backendReachable ? 200 : 503 }
     );

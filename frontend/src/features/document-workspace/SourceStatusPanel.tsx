@@ -32,7 +32,11 @@ export function SourceStatusPanel({
   uploadStatus
 }: SourceStatusPanelProps) {
   return (
-    <Panel className="flex min-h-[520px] flex-col" labelledBy="sources-heading">
+    <Panel
+      aria-busy={!health || uploadStatus === "loading" || queryStatus === "loading"}
+      className="flex min-h-[520px] flex-col"
+      labelledBy="sources-heading"
+    >
       <PanelHeader
         action={<StatusPill tone={healthTone(health)}>{healthLabel(health)}</StatusPill>}
         id="sources-heading"
@@ -45,7 +49,10 @@ export function SourceStatusPanel({
             <Server aria-hidden className="h-4 w-4 text-[var(--accent)]" />
             Backend
           </h3>
-          <dl className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)] bg-[#fbfcfb]">
+          <dl
+            aria-live="polite"
+            className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)] bg-[#fbfcfb]"
+          >
             <div className="grid grid-cols-[1fr_auto] gap-3 px-3 py-2.5 text-sm">
               <dt className="text-[var(--muted)]">Configuration</dt>
               <dd className="font-medium">
@@ -105,7 +112,10 @@ export function SourceStatusPanel({
             Retrieved sources
           </h3>
           {sources.length > 0 ? (
-            <ol className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)] bg-[#fbfcfb]">
+            <ol
+              aria-live="polite"
+              className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)] bg-[#fbfcfb]"
+            >
               {sources.map((source, index) => (
                 <li className="px-3 py-3 text-sm leading-6" key={`${source}-${index}`}>
                   <span className="mb-1 block text-xs font-semibold text-[var(--muted)]">
@@ -116,7 +126,11 @@ export function SourceStatusPanel({
               ))}
             </ol>
           ) : (
-            <div className="flex min-h-36 items-center justify-center rounded-md border border-[var(--border)] bg-[#fbfcfb] px-4 text-center text-sm text-[var(--muted)]">
+            <div
+              aria-live="polite"
+              className="flex min-h-36 items-center justify-center rounded-md border border-[var(--border)] bg-[#fbfcfb] px-4 text-center text-sm text-[var(--muted)]"
+              role="status"
+            >
               Sources will appear after an answer.
             </div>
           )}

@@ -48,4 +48,29 @@ describe("POST /api/upload", () => {
     });
     expect(response.status).toBe(400);
   });
+
+  it("returns a generic error when the backend upload fetch fails", async () => {
+    process.env.BACKEND_API_URL = "https://backend.example.test";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED backend.example.test"))
+    );
+
+    const file = new File(["pdf"], "synthetic.pdf", { type: "application/pdf" });
+    const formData = new FormData();
+    formData.append("uploaded_files", file);
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/upload", {
+        method: "POST",
+        body: formData
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: "AuthLens could not upload documents."
+    });
+    expect(response.status).toBe(502);
+  });
 });

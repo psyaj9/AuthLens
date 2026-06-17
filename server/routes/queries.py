@@ -78,6 +78,7 @@ async def queries(
     except Exception as e:
         if is_production():
             logger.error("Error processing query.")
+            return _error_response("Unable to process query.", 500)
         else:
             logger.error(f"Error processing query: {e}")
-        return _error_response(str(e), 500)
+            return _error_response(str(e), 500)

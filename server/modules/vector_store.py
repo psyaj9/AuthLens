@@ -7,6 +7,8 @@ from pinecone import Pinecone, ServerlessSpec
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from logger import logger
+from modules.config import is_production
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(SERVER_DIR / ".env")
@@ -118,11 +120,23 @@ def load_vector_store(uploaded_files):
                 for vector_id, values, item_metadata in zip(vector_ids, embedding, metadata)
             ]
 
-            with tqdm(total=len(embedding), desc=f"Uploading {file_path.name} to Pinecone") as pbar:
+            upload_description = (
+                "Uploading document to Pinecone"
+                if is_production()
+                else f"Uploading {file_path.name} to Pinecone"
+            )
+            with tqdm(total=len(embedding), desc=upload_description) as pbar:
                 pinecone_index.upsert(vectors=vectors)
                 pbar.update(len(embedding))
 
-            print(f"Uploaded {len(embedding)} vectors for {file_path.name} to Pinecone index {pinecone_index_name}.")
+            if is_production():
+                logger.info(
+                    f"Uploaded vectors to Pinecone. vector_count={len(embedding)}"
+                )
+            else:
+                logger.info(
+                    f"Uploaded {len(embedding)} vectors for {file_path.name} to Pinecone index {pinecone_index_name}."
+                )
     finally:
         for file_path in filepaths:
             file_path.unlink(missing_ok=True)

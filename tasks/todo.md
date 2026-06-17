@@ -1,17 +1,22 @@
 # Build Next.js frontend and production deployment binding
 
-- [ ] Confirm baseline repo state and existing frontend directory status.
-- [ ] Harden FastAPI backend for production frontend binding.
-- [ ] Add stable API contracts, health check, upload validation, and internal token guard.
-- [ ] Build a Next.js frontend with server-side proxy route handlers.
-- [ ] Implement the approved AuthLens workspace UI with safety-edited demo copy.
-- [ ] Add Vercel, Render, CircleCI, and environment documentation/configuration.
-- [ ] Run security review and fix actionable findings.
+- [x] Confirm baseline repo state and existing frontend directory status.
+- [x] Harden FastAPI backend for production frontend binding.
+- [x] Add stable API contracts, health check, upload validation, and internal token guard.
+- [x] Build a Next.js frontend with server-side proxy route handlers.
+- [x] Implement the approved AuthLens workspace UI with safety-edited demo copy.
+- [x] Add Vercel, Render, CircleCI, and environment documentation/configuration.
+- [x] Run security review and fix actionable findings.
 - [ ] Verify backend tests, frontend lint/type/test/build, and rendered workflow.
 
 ## Review
 
-- Pending implementation and verification.
+- Added `.gitignore` coverage for frontend dependencies, Next build output, Playwright output, coverage, TypeScript build info, and Python/tooling caches to avoid giant commits.
+- Added FastAPI health, production CORS, internal token guard, typed response schemas, upload validation, production-safe error responses, production log redaction, and upload cleanup.
+- Added a Next.js frontend under `frontend/` with server-side proxy route handlers, structured workspace components, PDF upload flow, question/answer flow, source/status panel, loading/error/empty states, and safety-edited demo copy.
+- Added Render, Vercel, CircleCI, and local/deployment documentation/configuration.
+- Ran subagent reviews for backend/security, frontend/build, and deploy/CI/git hygiene; fixed wildcard CORS, source-path disclosure, PDF signature validation, unsafe filenames, production upload logging, health contract validation, order-dependent tests, and async accessibility announcements.
+- Verified backend with `.venv\Scripts\python.exe -m unittest discover tests` and frontend with `npm test`, `npm run lint`, `npm run typecheck`, and `npm run build`.
 
 # Fix server logger startup failure
 

@@ -124,6 +124,11 @@ class BackendHardeningTests(unittest.TestCase):
 
         self.assertEqual(response.headers["access-control-allow-origin"], "https://app.example.com")
 
+    def test_cors_rejects_wildcard_origins_with_credentials(self):
+        with patch.dict(os.environ, {"ALLOWED_ORIGINS": "*"}, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "ALLOWED_ORIGINS cannot include wildcard"):
+                self._client()
+
     def test_unhandled_errors_use_error_response_shape(self):
         main = importlib.import_module("main")
 
@@ -205,6 +210,34 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(response.json(), {"error": "Only PDF uploads are allowed."})
         load_vector_store.assert_not_called()
 
+    def test_upload_rejects_pdf_extension_with_non_pdf_bytes_before_indexing(self):
+        client = self._client()
+        upload_module = importlib.import_module("routes.upload_pdf")
+
+        with patch.object(upload_module, "load_vector_store") as load_vector_store:
+            response = client.post(
+                "/api/upload_pdf/",
+                files=[("uploaded_files", ("notes.pdf", b"not a pdf", "application/pdf"))],
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Only valid PDF uploads are allowed."})
+        load_vector_store.assert_not_called()
+
+    def test_upload_rejects_path_like_filenames_before_indexing(self):
+        client = self._client()
+        upload_module = importlib.import_module("routes.upload_pdf")
+
+        with patch.object(upload_module, "load_vector_store") as load_vector_store:
+            response = client.post(
+                "/api/upload_pdf/",
+                files=[("uploaded_files", ("../patient.pdf", b"%PDF-1.4", "application/pdf"))],
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Uploaded filename is not allowed."})
+        load_vector_store.assert_not_called()
+
     def test_upload_rejects_empty_filenames_before_indexing(self):
         client = self._client()
         upload_module = importlib.import_module("routes.upload_pdf")
@@ -248,7 +281,11 @@ class BackendHardeningTests(unittest.TestCase):
                     files=[
                         (
                             "uploaded_files",
-                            ("large.pdf", b"x" * (1024 * 1024 + 1), "application/pdf"),
+                            (
+                                "large.pdf",
+                                b"%PDF-" + (b"x" * (1024 * 1024 + 1)),
+                                "application/pdf",
+                            ),
                         )
                     ],
                 )
@@ -274,6 +311,32 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"message": "Files uploaded and processed successfully."})
         self.assertEqual(observed_payloads, [b"%PDF-stream"])
+
+    def test_upload_rejection_logs_do_not_include_filename_in_production(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "MAX_UPLOAD_MB": "1"}, clear=False):
+            client = self._client()
+            upload_module = importlib.import_module("routes.upload_pdf")
+
+            with patch.object(upload_module, "load_vector_store") as load_vector_store:
+                with self.assertLogs(upload_module.logger, level="WARNING") as logs:
+                    response = client.post(
+                        "/api/upload_pdf/",
+                        files=[
+                            (
+                                "uploaded_files",
+                                (
+                                    "uploaded-sensitive-name.pdf",
+                                    b"x" * (1024 * 1024 + 1),
+                                    "application/pdf",
+                                ),
+                            )
+                        ],
+                    )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Upload rejected."})
+        self.assertEqual(load_vector_store.call_count, 0)
+        self.assertNotIn("uploaded-sensitive-name.pdf", "\n".join(logs.output))
 
     def test_queries_suppresses_sensitive_content_logs_in_production(self):
         with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
@@ -304,6 +367,48 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertNotIn("what is diabetes?", log_text)
         self.assertNotIn("Diabetes is a chronic condition.", log_text)
         self.assertNotIn("Sensitive document chunk", log_text)
+
+    def test_query_errors_do_not_leak_exception_details_in_production(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
+            client = self._client()
+            queries_module, index, embeddings = self._query_dependencies()
+
+            with patch.object(
+                queries_module, "get_pinecone_index", return_value=(index, "auth-index")
+            ), patch.object(
+                queries_module, "get_embeddings", return_value=embeddings
+            ), patch.object(
+                queries_module, "get_llm", return_value=object()
+            ), patch.object(
+                queries_module,
+                "handle_query_chain",
+                side_effect=RuntimeError("vendor timeout with sensitive context"),
+            ):
+                response = client.post(
+                    "/api/queries/",
+                    data={"user_query": "what is diabetes?"},
+                )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"error": "Unable to process query."})
+
+    def test_upload_errors_do_not_leak_exception_details_in_production(self):
+        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False):
+            client = self._client()
+            upload_module = importlib.import_module("routes.upload_pdf")
+
+            with patch.object(
+                upload_module,
+                "load_vector_store",
+                side_effect=RuntimeError("filesystem path with sensitive context"),
+            ):
+                response = client.post(
+                    "/api/upload_pdf/",
+                    files=[("uploaded_files", ("doc.pdf", b"%PDF-1.4", "application/pdf"))],
+                )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"error": "Unable to process upload."})
 
 
 if __name__ == "__main__":

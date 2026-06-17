@@ -25,13 +25,6 @@ function errorResponse(error: string, status: number) {
 }
 
 export async function POST(request: Request) {
-  const backendApiUrl = getBackendApiUrl();
-
-  if (!backendApiUrl) {
-    const error = backendNotConfiguredError();
-    return errorResponse(error.error, error.status);
-  }
-
   const incomingFormData = await request.formData().catch(() => null);
 
   if (!incomingFormData) {
@@ -44,6 +37,13 @@ export async function POST(request: Request) {
 
   if (files.length === 0) {
     return errorResponse("Select at least one PDF before uploading.", 400);
+  }
+
+  const backendApiUrl = getBackendApiUrl();
+
+  if (!backendApiUrl) {
+    const error = backendNotConfiguredError();
+    return errorResponse(error.error, error.status);
   }
 
   const body = new FormData();
@@ -72,11 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       typeof payload === "string" ? { message: payload } : payload
     );
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "AuthLens could not upload documents.";
-    return errorResponse(message, 502);
+  } catch {
+    return errorResponse("AuthLens could not upload documents.", 502);
   }
 }

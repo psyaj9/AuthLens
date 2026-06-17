@@ -35,7 +35,11 @@ export function UploadPanel({
   const hasDocuments = documents.length > 0;
 
   return (
-    <Panel className="flex min-h-[520px] flex-col" labelledBy="documents-heading">
+    <Panel
+      aria-busy={status === "loading"}
+      className="flex min-h-[520px] flex-col"
+      labelledBy="documents-heading"
+    >
       <PanelHeader
         action={<StatusPill tone={uploadTone(status)}>Documents</StatusPill>}
         id="documents-heading"
@@ -106,7 +110,11 @@ export function UploadPanel({
               ))}
             </ul>
           ) : (
-            <div className="flex min-h-36 items-center justify-center rounded-md border border-[var(--border)] bg-[#fbfcfb] px-4 text-center text-sm text-[var(--muted)]">
+            <div
+              aria-live="polite"
+              className="flex min-h-36 items-center justify-center rounded-md border border-[var(--border)] bg-[#fbfcfb] px-4 text-center text-sm text-[var(--muted)]"
+              role="status"
+            >
               No PDFs selected.
             </div>
           )}

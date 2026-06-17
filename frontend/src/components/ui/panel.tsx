@@ -1,14 +1,14 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-type PanelProps = {
+type PanelProps = HTMLAttributes<HTMLElement> & {
   children: ReactNode;
   className?: string;
   labelledBy?: string;
 };
 
-export function Panel({ children, className, labelledBy }: PanelProps) {
+export function Panel({ children, className, labelledBy, ...props }: PanelProps) {
   return (
     <section
       aria-labelledby={labelledBy}
@@ -16,6 +16,7 @@ export function Panel({ children, className, labelledBy }: PanelProps) {
         "min-h-0 rounded-md border border-[var(--border)] bg-[var(--panel)] shadow-[0_1px_2px_rgba(24,33,28,0.05)]",
         className
       )}
+      {...props}
     >
       {children}
     </section>

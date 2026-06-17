@@ -118,6 +118,50 @@ class VectorStoreTests(unittest.TestCase):
 
             self.assertFalse((Path(tmpdir) / "doc.pdf").exists())
 
+    def test_load_vector_store_does_not_log_filename_in_production(self):
+        document = SimpleNamespace(
+            page_content="First chunk",
+            metadata={"source": "sensitive-name.pdf"},
+        )
+        upload = SimpleNamespace(
+            filename="sensitive-name.pdf",
+            file=SimpleNamespace(read=lambda: b"%PDF-test"),
+        )
+        index = MagicMock()
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
+            os.environ,
+            {"ENVIRONMENT": "production"},
+            clear=False,
+        ), patch.object(
+            self.vector_store, "UPLOAD_DIR", Path(tmpdir)
+        ), patch.object(
+            self.vector_store, "get_pinecone_index", return_value=(index, "authlens-test")
+        ), patch.object(
+            self.vector_store, "PyPDFLoader"
+        ) as loader_cls, patch.object(
+            self.vector_store, "RecursiveCharacterTextSplitter"
+        ) as splitter_cls, patch.object(
+            self.vector_store, "GoogleGenerativeAIEmbeddings"
+        ) as embeddings_cls, patch.object(
+            self.vector_store, "tqdm"
+        ) as tqdm_cls, self.assertLogs(
+            self.vector_store.logger,
+            level="INFO",
+        ) as logs:
+            loader_cls.return_value.load.return_value = [document]
+            splitter_cls.return_value.split_documents.return_value = [document]
+            embeddings_cls.return_value.embed_documents.return_value = [[0.1, 0.2, 0.3]]
+            tqdm_cls.return_value.__enter__.return_value = MagicMock()
+
+            self.vector_store.load_vector_store([upload])
+
+        self.assertNotIn("sensitive-name.pdf", "\n".join(logs.output))
+        self.assertEqual(
+            tqdm_cls.call_args.kwargs["desc"],
+            "Uploading document to Pinecone",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

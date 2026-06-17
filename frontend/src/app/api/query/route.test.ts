@@ -33,6 +33,37 @@ describe("POST /api/query", () => {
     expect(init.body.get("user_query")).toBe("What can I upload?");
   });
 
+  it("sanitizes source labels before returning them to the browser", async () => {
+    process.env.BACKEND_API_URL = "https://backend.example.test";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          response: "Use de-identified documents.",
+          source_documents: [
+            "C:\\server\\uploads\\patient-note.pdf",
+            "/app/server/uploads/patient-note.pdf",
+            "/tmp/radiology.pdf"
+          ]
+        })
+      )
+    );
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_query: "What can I upload?" })
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      response: "Use de-identified documents.",
+      source_documents: ["patient-note.pdf", "radiology.pdf"]
+    });
+  });
+
   it("returns a normalized validation error for blank queries", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -51,5 +82,27 @@ describe("POST /api/query", () => {
     });
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a generic error when the backend fetch fails", async () => {
+    process.env.BACKEND_API_URL = "https://backend.example.test";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("getaddrinfo backend.example.test"))
+    );
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_query: "What can I upload?" })
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: "AuthLens could not reach the backend."
+    });
+    expect(response.status).toBe(502);
   });
 });

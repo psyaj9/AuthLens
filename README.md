@@ -72,7 +72,7 @@ Do not use `NEXT_PUBLIC_BACKEND_API_URL` for the backend service URL. Keep the b
 `render.yaml` defines one Python web service:
 
 - Root directory: `server`
-- Build command: `pip install -r requirements.txt`
+- Build command: `uv pip install -r requirements.txt`
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 - Health check path: `/api/health/`
 
