@@ -35,3 +35,34 @@
 - Verified live Pinecone index `auth-index`: ready, dimension `768`, metric `cosine`, upsert/query/delete healthcheck OK.
 - Verified with `.venv\Scripts\python.exe -m unittest tests.test_vector_store tests.test_logger tests.test_app_startup`.
 - Verified uvicorn serves `/openapi.json` on `127.0.0.1:8765`.
+
+# Fix Google embedding model 404
+
+- [x] Confirm root cause from the upload error and live embedding probe.
+- [x] Add regression coverage for the Google embedding model configuration.
+- [x] Update upload and query paths to use the working embedding model consistently.
+- [x] Verify focused tests and a live embedding dimension check.
+
+## Review
+
+- Replaced the invalid Google embedding model ID with the live-working Gemini embedding model.
+- Forced 768-dimensional embeddings so uploaded vectors match the existing Pinecone index.
+- Reused the same embedding helper for upload and query requests.
+- Added regression coverage for the embedding constructor configuration.
+- Ignored runtime PDF uploads under `server/uploads/`.
+- Verified with `.venv\Scripts\python.exe -m unittest tests.test_vector_store tests.test_app_startup`.
+- Verified a live embedding probe returns `dim=768`.
+
+# Fix query endpoint 422
+
+- [x] Confirm why `/api/queries/` asks Postman for `retriever`.
+- [x] Add route coverage proving only `user_query` is required.
+- [x] Remove the client-facing `retriever` form dependency.
+- [x] Verify focused route and startup tests.
+
+## Review
+
+- Removed the unnecessary client-facing `retriever` form field from `/api/queries/`.
+- Kept `SimpleRetriever` internal so the API only needs `user_query` from Postman.
+- Added route coverage proving `POST /api/queries/` accepts only `user_query`.
+- Verified with `.venv\Scripts\python.exe -m unittest tests.test_queries_route tests.test_app_startup tests.test_vector_store`.

@@ -1,6 +1,7 @@
 import importlib
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -59,7 +60,9 @@ class VectorStoreTests(unittest.TestCase):
         )
         index = MagicMock()
 
-        with patch.object(
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            self.vector_store, "UPLOAD_DIR", Path(tmpdir)
+        ), patch.object(
             self.vector_store, "get_pinecone_index", return_value=(index, "authlens-test")
         ), patch.object(
             self.vector_store, "PyPDFLoader"
@@ -77,6 +80,10 @@ class VectorStoreTests(unittest.TestCase):
 
             self.vector_store.load_vector_store([upload])
 
+        embeddings_cls.assert_called_once_with(
+            model="gemini-embedding-2-preview",
+            output_dimensionality=768,
+        )
         vectors = index.upsert.call_args.kwargs["vectors"]
         self.assertEqual(vectors[0][2]["text"], "First chunk")
         self.assertEqual(vectors[0][2]["source"], "doc.pdf")

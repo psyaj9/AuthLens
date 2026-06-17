@@ -17,6 +17,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 PINECONE_CLOUD = "aws"
 PINECONE_DIMENSION = 768
 PINECONE_METRIC = "cosine"
+EMBEDDING_MODEL = "gemini-embedding-2-preview"
 
 _pinecone_index = None
 _pinecone_index_name = None
@@ -69,11 +70,18 @@ def get_pinecone_index():
     _pinecone_index_name = pinecone_index_name
     return _pinecone_index, _pinecone_index_name
 
+
+def get_embeddings():
+    return GoogleGenerativeAIEmbeddings(
+        model=EMBEDDING_MODEL,
+        output_dimensionality=PINECONE_DIMENSION,
+    )
+
 # Load and process documents
 
 def load_vector_store(uploaded_files):
     pinecone_index, pinecone_index_name = get_pinecone_index()
-    embeddings = GoogleGenerativeAIEmbeddings(model="model/embeddings-001")
+    embeddings = get_embeddings()
     filepath = []
     
 

@@ -2,10 +2,9 @@ from modules.llm import get_llm
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 from modules.query_handler import handle_query_chain
-from modules.vector_store import get_pinecone_index
+from modules.vector_store import get_embeddings, get_pinecone_index
 from langchain_core.documents import Document
 from langchain_classic.schema import BaseRetriever
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from pydantic import Field
 from typing import List, Optional
 from logger import logger
@@ -15,13 +14,12 @@ router = APIRouter()
 @router.post("/queries/")
 async def queries(
     user_query: str = Form(...),
-    retriever: BaseRetriever = Form(...),
 ):
     try:
         logger.info(f"Received query: {user_query}")
 
         pinecone_index, _ = get_pinecone_index()
-        embeddings = GoogleGenerativeAIEmbeddings(model="model/embeddings-001")
+        embeddings = get_embeddings()
         embedded_query = embeddings.embed_query(user_query)
 
 
