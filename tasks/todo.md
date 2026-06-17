@@ -1,15 +1,21 @@
 # Complete Phase 7 MVP Gate And PRD Re-Review
 
-- [ ] Re-read the PRD and map current implementation against remaining MVP/Phase 7 requirements.
-- [ ] Add organization-scoped audit read APIs for case audit and organization audit.
-- [ ] Add synthetic golden-case smoke fixtures and validation tests.
-- [ ] Add explicit red-team/safety tests for prompt injection, unsupported draft claims, tenant isolation, and synthetic-only guardrails.
-- [ ] Verify backend/client/deployment checks after the Phase 7 changes.
-- [ ] Summarize completed phases and PRD next-stage roadmap.
+- [x] Re-read the PRD and map current implementation against remaining MVP/Phase 7 requirements.
+- [x] Add organization-scoped audit read APIs for case audit and organization audit.
+- [x] Add synthetic golden-case smoke fixtures and validation tests.
+- [x] Add explicit red-team/safety tests for prompt injection, unsupported draft claims, tenant isolation, and synthetic-only guardrails.
+- [x] Verify backend/client/deployment checks after the Phase 7 changes.
+- [x] Summarize completed phases and PRD next-stage roadmap.
 
 ## Review
 
-- Pending implementation and verification.
+- Added case-scoped and organization-scoped audit read APIs, including admin-only organization audit access and cross-tenant denial coverage.
+- Added Phase 7 smoke golden fixtures for 3 synthetic lumbar MRI cases: approval-ready, missing conservative therapy, and prompt-injection.
+- Hardened legacy query/upload paths and prior-auth flows with production fail-fast config validation, production fail-closed internal token behavior, reset-token invalidation, untrusted-document prompt rules, draft human-review disclaimer verification, and secure production auth cookies.
+- Verified backend with `.venv\Scripts\python.exe -m unittest discover tests` passing 55 tests.
+- Verified client with `npm run lint`, `npm run typecheck`, `npm run test` passing 33 Vitest tests, and `npm run build`.
+- `npm run test:e2e` was blocked because an existing Next dev server was already running for this project on port 3010; manual Playwright desktop/mobile login smoke checks against that server passed.
+- Security/dependency notes: `npm audit --audit-level=high` reported only moderate Next/PostCSS advisories with no safe non-breaking fix from npm audit; Python dependency audit could not run because `pip_audit` is not installed in the venv.
 
 # Harden Legacy Debug Proxy POST Routes
 
