@@ -76,6 +76,27 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8)
+    name: str
+    organization_name: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    reset_token: str | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+    reset_token: str
+    password: str = Field(min_length=8)
+
+
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

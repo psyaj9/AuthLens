@@ -85,7 +85,7 @@ def read_limited_upload(uploaded_file: UploadFile) -> bytes:
         total += len(chunk)
         if total > max_bytes:
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail=f"File {safe_filename(uploaded_file.filename)} exceeds {format_upload_mb(get_max_upload_mb())} MB upload limit.",
             )
         chunks.append(chunk)

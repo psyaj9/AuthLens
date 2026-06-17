@@ -53,6 +53,17 @@ class OrganizationMembership(Base, TimestampMixin):
     __table_args__ = (Index("ix_membership_user_org", "user_id", "organization_id", unique=True),)
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("reset"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class PriorAuthCase(Base, TimestampMixin):
     __tablename__ = "prior_auth_cases"
 

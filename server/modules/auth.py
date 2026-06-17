@@ -46,6 +46,10 @@ def hash_password(password: str) -> str:
     return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt}${_b64encode(digest)}"
 
 
+def hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def verify_password(password: str, password_hash: str) -> bool:
     try:
         algorithm, iterations_text, salt, expected = password_hash.split("$", 3)

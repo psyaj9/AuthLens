@@ -13,6 +13,8 @@
 - Added DB-backed prior-auth entities, Alembic migration scaffolding, demo seed command, JWT auth, organization scoping, audit events, typed documents, criteria, evidence, readiness, draft, and citation-check workflow APIs while keeping legacy Q&A routes.
 - Replaced the client first screen with the prior-auth workspace, routed browser calls through Next route handlers, added demo login behavior, and updated e2e coverage for the new first screen.
 - Verified with backend unittests, Alembic migration smoke, client lint/type/unit/build, Playwright desktop/mobile e2e, and a live browser render on local dev ports.
+- Post-review safety fixes: draft approval now requires current citation verification, effective evidence overrides control readiness/drafts/citations, `met` overrides require existing citation-backed evidence, low-readiness cases serialize as `needs_more_documentation`, typed uploads enforce size limits, assignees must belong to the org, criteria edits are audited, and mutating Next proxy routes reject cross-origin requests.
+- Final verification after review fixes: backend unittest discover passed 42 tests, client Vitest passed 25 tests across 7 files, client lint/typecheck/build passed, and Playwright desktop/mobile e2e passed 4 tests.
 
 # Fix client API proxy 503/502
 

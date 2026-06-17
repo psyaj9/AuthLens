@@ -1,16 +1,36 @@
+from datetime import UTC, datetime, timedelta
+from secrets import token_urlsafe
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from db.session import get_db
 from dependencies.auth import CurrentUser, get_current_user
-from models.priorauth import Organization, OrganizationMembership, User
-from modules.auth import create_access_token, verify_password
-from modules.schemas import AuthResponse, LoginRequest, OrganizationSummary, UserProfile
+from models.priorauth import Organization, OrganizationMembership, PasswordResetToken, User
+from modules.auth import create_access_token, hash_password, hash_reset_token, verify_password
+from modules.config import is_production
+from modules.schemas import (
+    AuthResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    LoginRequest,
+    MessageResponse,
+    OrganizationSummary,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UserProfile,
+)
 from services.audit import log_audit_event
 
 
 router = APIRouter()
+RESET_TOKEN_EXPIRE_MINUTES = 60
+RESET_MESSAGE = "If an account exists, password reset instructions have been prepared."
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
 
 
 def user_profile(user: User, organization: Organization, role: str) -> UserProfile:
@@ -29,7 +49,7 @@ def user_profile(user: User, organization: Organization, role: str) -> UserProfi
 
 @router.post("/auth/login", response_model=AuthResponse)
 async def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == payload.email.strip().lower()))
+    user = db.scalar(select(User).where(User.email == normalize_email(payload.email)))
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
@@ -57,6 +77,105 @@ async def login(payload: LoginRequest, db: Session = Depends(get_db)):
     )
     db.commit()
     return AuthResponse(access_token=token, user=user_profile(user, organization, membership.role))
+
+
+@router.post("/auth/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    email = normalize_email(payload.email)
+    if db.scalar(select(User).where(User.email == email)) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
+
+    organization = Organization(name=payload.organization_name.strip(), plan="self_service")
+    user = User(
+        email=email,
+        name=payload.name.strip(),
+        password_hash=hash_password(payload.password),
+        is_active=True,
+    )
+    db.add(organization)
+    db.add(user)
+    db.flush()
+    membership = OrganizationMembership(
+        user_id=user.id,
+        organization_id=organization.id,
+        role="admin",
+    )
+    db.add(membership)
+    log_audit_event(
+        db,
+        organization_id=organization.id,
+        user_id=user.id,
+        action="user.registered",
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"role": membership.role},
+    )
+    token = create_access_token(user_id=user.id, organization_id=organization.id, role=membership.role)
+    db.commit()
+    db.refresh(user)
+    db.refresh(organization)
+    return AuthResponse(access_token=token, user=user_profile(user, organization, membership.role))
+
+
+@router.post("/auth/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    reset_token = None
+    user = db.scalar(select(User).where(User.email == normalize_email(payload.email)))
+    if user is not None and user.is_active:
+        raw_token = token_urlsafe(32)
+        membership = db.scalar(select(OrganizationMembership).where(OrganizationMembership.user_id == user.id))
+        token_record = PasswordResetToken(
+            user_id=user.id,
+            token_hash=hash_reset_token(raw_token),
+            expires_at=datetime.now(UTC) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES),
+        )
+        db.add(token_record)
+        if membership is not None:
+            log_audit_event(
+                db,
+                organization_id=membership.organization_id,
+                user_id=user.id,
+                action="password_reset.requested",
+                entity_type="user",
+                entity_id=user.id,
+            )
+        if not is_production():
+            reset_token = raw_token
+        db.commit()
+    return ForgotPasswordResponse(message=RESET_MESSAGE, reset_token=reset_token)
+
+
+@router.post("/auth/reset-password", response_model=MessageResponse)
+async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    now = datetime.now(UTC)
+    token_record = db.scalar(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == hash_reset_token(payload.reset_token),
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > now,
+        )
+    )
+    if token_record is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
+
+    user = db.get(User, token_record.user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
+
+    membership = db.scalar(select(OrganizationMembership).where(OrganizationMembership.user_id == user.id))
+    user.password_hash = hash_password(payload.password)
+    token_record.used_at = now
+    if membership is not None:
+        log_audit_event(
+            db,
+            organization_id=membership.organization_id,
+            user_id=user.id,
+            action="password_reset.completed",
+            entity_type="user",
+            entity_id=user.id,
+        )
+    db.commit()
+    return MessageResponse(message="Password reset complete.")
 
 
 @router.get("/auth/me", response_model=UserProfile)

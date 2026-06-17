@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { askQuestion, AuthLensApiError, uploadDocuments } from "./client";
+import {
+  askQuestion,
+  AuthLensApiError,
+  forgotPassword,
+  registerUser,
+  resetPassword,
+  uploadDocuments
+} from "./client";
 
 describe("client API client", () => {
   it("posts questions to the local Next.js API route without exposing the backend URL", async () => {
@@ -56,5 +63,81 @@ describe("client API client", () => {
       status: 503
     });
     expect(AuthLensApiError).toBeDefined();
+  });
+
+  it("registers users through the local auth route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        access_token: "jwt",
+        token_type: "bearer",
+        user: {
+          id: "user_1",
+          email: "owner@example.test",
+          name: "Owner",
+          role: "admin",
+          organization: { id: "org_1", name: "Practice", plan: "self_service" }
+        }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await registerUser({
+      email: "owner@example.test",
+      password: "registered-password",
+      name: "Owner",
+      organization_name: "Practice"
+    });
+
+    expect(result.user.email).toBe("owner@example.test");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/register",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "owner@example.test",
+          password: "registered-password",
+          name: "Owner",
+          organization_name: "Practice"
+        })
+      })
+    );
+  });
+
+  it("requests and consumes password reset tokens through local auth routes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          message: "If an account exists, password reset instructions have been prepared.",
+          reset_token: "reset-token"
+        })
+      )
+      .mockResolvedValueOnce(Response.json({ message: "Password reset complete." }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const forgotResult = await forgotPassword("owner@example.test");
+    const resetResult = await resetPassword("reset-token", "new-password");
+
+    expect(forgotResult.reset_token).toBe("reset-token");
+    expect(resetResult.message).toBe("Password reset complete.");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/auth/forgot-password",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "owner@example.test" })
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/auth/reset-password",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reset_token: "reset-token", password: "new-password" })
+      })
+    );
   });
 });

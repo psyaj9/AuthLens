@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from db.session import get_db
@@ -15,15 +15,32 @@ router = APIRouter()
 
 
 def _missing_required_count(db: Session, case_id: str) -> int:
-    return db.scalar(
-        select(func.count(PolicyCriterion.id))
-        .outerjoin(EvidenceMatch, EvidenceMatch.criterion_id == PolicyCriterion.id)
-        .where(
-            PolicyCriterion.case_id == case_id,
-            PolicyCriterion.is_required.is_(True),
-            (EvidenceMatch.id.is_(None)) | (EvidenceMatch.status != "met"),
+    criteria = list(
+        db.scalars(
+            select(PolicyCriterion).where(
+                PolicyCriterion.case_id == case_id,
+                PolicyCriterion.is_required.is_(True),
+            )
         )
-    ) or 0
+    )
+    matches = {
+        match.criterion_id: match
+        for match in db.scalars(select(EvidenceMatch).where(EvidenceMatch.case_id == case_id))
+    }
+    missing = 0
+    for criterion in criteria:
+        match = matches.get(criterion.id)
+        effective_status = match.reviewer_override_status if match and match.reviewer_override_status else (match.status if match else "not_found")
+        has_citation = bool(
+            match
+            and match.source_file.strip()
+            and match.source_page.strip()
+            and match.source_quote.strip()
+            and match.why_it_matters.strip()
+        )
+        if effective_status != "met" or not has_citation:
+            missing += 1
+    return missing
 
 
 def case_response(db: Session, case: PriorAuthCase) -> CaseResponse:
