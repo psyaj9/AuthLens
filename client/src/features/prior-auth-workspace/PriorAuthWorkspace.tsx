@@ -136,6 +136,7 @@ function LoginPanel({
   status: AsyncStatus;
 }) {
   const [email, setEmail] = useState("");
+  const [credentialsEditable, setCredentialsEditable] = useState(false);
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
   const [organizationName, setOrganizationName] = useState("");
@@ -156,6 +157,7 @@ function LoginPanel({
   }
 
   const title = mode === "register" ? "Create account" : mode === "forgot" ? "Forgot password" : mode === "reset" ? "Reset password" : "Sign in";
+  const credentialsReadOnly = mode === "login" && !credentialsEditable;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-8">
@@ -167,7 +169,7 @@ function LoginPanel({
         >
           Synthetic or de-identified documents only.
         </PanelHeader>
-        <form className="flex flex-col gap-4 p-5" onSubmit={submit}>
+        <form autoComplete="off" className="flex flex-col gap-4 p-5" onSubmit={submit}>
           {mode === "register" ? (
             <>
               <label className="flex flex-col gap-2 text-sm font-semibold">
@@ -207,9 +209,12 @@ function LoginPanel({
             <label className="flex flex-col gap-2 text-sm font-semibold">
               Email
               <input
-                autoComplete="email"
+                autoComplete={mode === "login" ? "off" : "email"}
                 className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+                onFocus={() => setCredentialsEditable(true)}
+                onMouseDown={() => setCredentialsEditable(true)}
                 onChange={(event) => setEmail(event.target.value)}
+                readOnly={credentialsReadOnly}
                 type="email"
                 value={email}
               />
@@ -219,9 +224,12 @@ function LoginPanel({
             <label className="flex flex-col gap-2 text-sm font-semibold">
               Password
               <input
-                autoComplete={mode === "register" ? "new-password" : "current-password"}
+                autoComplete={mode === "login" ? "off" : "new-password"}
                 className="min-h-10 rounded-md border border-[var(--border)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+                onFocus={() => setCredentialsEditable(true)}
+                onMouseDown={() => setCredentialsEditable(true)}
                 onChange={(event) => setPassword(event.target.value)}
+                readOnly={credentialsReadOnly}
                 type="password"
                 value={password}
               />

@@ -4,12 +4,16 @@
 - [x] Implement organization-creating registration, forgot-password, and reset-password endpoints.
 - [x] Remove static seeded demo accounts and default demo credentials from code/docs.
 - [x] Add client auth helpers, proxy routes, and account-first login/register/reset UI.
-- [ ] Verify backend/client full test, lint, typecheck, build, e2e, and migration smoke.
-- [ ] Generate one-time JWT secret for user copy/paste without reading local env files.
+- [x] Verify backend/client full test, lint, typecheck, build, e2e, and migration smoke.
+- [x] Generate one-time JWT secret for user copy/paste without reading local env files.
 
 ## Review
 
-- Pending final verification.
+- Added self-service registration, forgot-password, and reset-password flows while keeping organization creation scoped to the registered admin user.
+- Removed static demo account seeding and visible default demo credentials from backend, client, tests, and README.
+- Hardened the login form against stale browser autofill so removed demo credentials do not reappear in persistent local browser profiles.
+- Verified with backend unittest discovery, Alembic migration smoke, client lint/typecheck/unit/build, Playwright desktop/mobile e2e, browser-rendered login fields, and a static search for removed demo credentials.
+- Generated the JWT secret for copy/paste only; it was not written to the repo or read from any `.env` file.
 
 # Implement PriorAuth Evidence Copilot MVP
 
