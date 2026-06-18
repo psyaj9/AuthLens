@@ -3,7 +3,7 @@
 - [x] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
 - [x] Execute Phase 1: reviewer workspace completion.
 - [x] Execute Phase 2: export artifacts, download APIs, and packet manifest.
-- [ ] Execute Phase 3: appeal workflow with denial-letter extraction.
+- [x] Execute Phase 3: appeal workflow with denial-letter extraction.
 - [ ] Execute Phase 4: structured LLM gateway and expanded eval runner.
 - [ ] Execute Phase 5: production-readiness hardening, security scan, and deployment gates.
 - [x] Update `README.md` so it reflects the PriorAuth Evidence Copilot product, runtime architecture, multi-agent implementation architecture, setup, verification, deployment, and roadmap.
@@ -19,6 +19,11 @@
 - Phase 1 verification passed: `npm run lint`, `npm run typecheck`, `npm run test` with 40 Vitest tests across 9 files, `npm run build`, and `npm run test:e2e` with 6 desktop/mobile Playwright tests.
 - Phase 2 exports are now implemented: persisted `ExportArtifact` records, Alembic migration `20260618_0003`, readiness/letter/packet export APIs, markdown download API, packet document/citation manifest, export creation/download audit events, and client export controls/download links.
 - Phase 2 verification passed: backend unittest discovery with 63 tests, `tests.test_exports` with 5 focused export tests, Alembic upgrade smoke through `20260618_0003`, client lint/typecheck/test/build, and Playwright desktop/mobile e2e with 6 tests.
+- Phase 3 appeals are now implemented: appeal cases can upload denial letters, generate appeal drafts, cite denial-letter reasons, reuse verified patient evidence, and keep citation/human-review gates before approval.
+- Added backend safety rules for appeal drafts: only `case_type="appeal"` can use the appeal draft route, missing denial letters fail before readiness-report checks, and denial reasons must retain a denial-letter file/page citation.
+- Addressed Phase 3 review findings: appeal cases can no longer bypass denial-letter requirements through the prior-auth draft route, denial-letter citations must stay attached to the denial-reason line, and draft-generation UI/e2e coverage now follows admin/coordinator RBAC.
+- Added/verified client appeal workflow support: appeal case creation, denial-letter document type, appeal draft helper/proxy route, and desktop/mobile e2e coverage for generating an appeal draft from a denial letter.
+- Phase 3 verification passed after review fixes: backend unittest discovery with 67 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

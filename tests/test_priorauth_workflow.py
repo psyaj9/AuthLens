@@ -700,10 +700,18 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertIn("not medically necessary", lowered)
         self.assertIn("insufficient conservative therapy documentation", lowered)
         self.assertIn("Clinician review is required", content)
+        self.assertIn("[denial.pdf, page 1]", content)
         self.assertIn("[note.pdf, page 1]", content)
         self.assertNotIn("guaranteed approval", lowered)
         self.assertNotIn("must approve", lowered)
         self.assertNotIn("this patient qualifies", lowered)
+
+        wrong_draft_response = client.post(
+            f"/api/cases/{case_id}/drafts/prior-auth",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(wrong_draft_response.status_code, 400)
+        self.assertEqual(wrong_draft_response.json(), {"error": "Prior authorization drafts require a prior-auth case"})
 
         check_response = client.post(
             f"/api/drafts/{draft['id']}/verify-citations",
@@ -711,6 +719,39 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(check_response.status_code, 200, check_response.text)
         self.assertEqual(check_response.json()["verification_status"], "pass")
+
+        edit_response = client.patch(
+            f"/api/drafts/{draft['id']}",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+            json={"content_markdown": content.replace("[denial.pdf, page 1]", "")},
+        )
+        self.assertEqual(edit_response.status_code, 200, edit_response.text)
+        recheck_response = client.post(
+            f"/api/drafts/{draft['id']}/verify-citations",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(recheck_response.status_code, 200, recheck_response.text)
+        self.assertEqual(recheck_response.json()["verification_status"], "fail")
+        self.assertTrue(
+            any("denial reason" in claim["claim"].lower() for claim in recheck_response.json()["unsupported_claims"])
+        )
+
+        moved_citation_content = content.replace("[denial.pdf, page 1]", "") + "\nReference: [denial.pdf, page 1]"
+        moved_edit_response = client.patch(
+            f"/api/drafts/{draft['id']}",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+            json={"content_markdown": moved_citation_content},
+        )
+        self.assertEqual(moved_edit_response.status_code, 200, moved_edit_response.text)
+        moved_recheck_response = client.post(
+            f"/api/drafts/{draft['id']}/verify-citations",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(moved_recheck_response.status_code, 200, moved_recheck_response.text)
+        self.assertEqual(moved_recheck_response.json()["verification_status"], "fail")
+        self.assertTrue(
+            any("denial reason" in claim["claim"].lower() for claim in moved_recheck_response.json()["unsupported_claims"])
+        )
 
     def test_appeal_draft_requires_denial_letter(self):
         client = self._client()
@@ -759,6 +800,44 @@ class PriorAuthWorkflowTests(unittest.TestCase):
 
         self.assertEqual(draft_response.status_code, 400)
         self.assertEqual(draft_response.json(), {"error": "Upload a denial letter before drafting an appeal"})
+
+    def test_appeal_draft_requires_denial_letter_before_readiness_report(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_response = client.post(
+            "/api/cases",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+            json={
+                "patient_label": "SYN-LMRI-APPEAL-NO-REPORT",
+                "payer_name": "Example Health Plan",
+                "specialty": "Radiology",
+                "requested_service": "Lumbar spine MRI",
+                "case_type": "appeal",
+            },
+        )
+        self.assertEqual(case_response.status_code, 201, case_response.text)
+        case_id = case_response.json()["id"]
+
+        draft_response = client.post(
+            f"/api/cases/{case_id}/drafts/appeal",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+
+        self.assertEqual(draft_response.status_code, 400)
+        self.assertEqual(draft_response.json(), {"error": "Upload a denial letter before drafting an appeal"})
+
+    def test_appeal_draft_requires_appeal_case_type(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-PRIOR-AUTH-NOT-APPEAL")
+
+        draft_response = client.post(
+            f"/api/cases/{case_id}/drafts/appeal",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+
+        self.assertEqual(draft_response.status_code, 400)
+        self.assertEqual(draft_response.json(), {"error": "Appeal drafts require an appeal case"})
 
     def test_clinician_can_audit_update_criteria_without_losing_source_provenance(self):
         client = self._client()

@@ -1,6 +1,6 @@
 # AuthLens PriorAuth Evidence Copilot
 
-AuthLens is evolving from a PDF Q&A demo into a case-based prior authorization evidence workspace. The current application supports synthetic or de-identified prior-auth cases, organization-scoped accounts, typed PDF uploads, payer-criteria extraction, patient-evidence matching, readiness reports, prior-auth draft generation, citation verification, audit events, and human review state.
+AuthLens is evolving from a PDF Q&A demo into a case-based prior authorization evidence workspace. The current application supports synthetic or de-identified prior-auth and appeal cases, organization-scoped accounts, typed PDF uploads, payer-criteria extraction, patient-evidence matching, readiness reports, prior-auth and appeal draft generation, citation verification, audit events, exports, and human review state.
 
 The original PDF chat routes still exist as compatibility and debug endpoints, but the product direction is the PriorAuth Evidence Copilot workflow.
 
@@ -15,13 +15,13 @@ AuthLens does not diagnose, recommend treatment, guarantee payer approval, or re
 The prior-auth workflow is organized around an organization-owned case:
 
 1. Register or sign in.
-2. Create a prior-auth case such as a lumbar spine MRI request.
-3. Upload typed PDFs, including payer policy documents and patient-supporting documents.
+2. Create a prior-auth or appeal case such as a lumbar spine MRI request.
+3. Upload typed PDFs, including payer policy documents, denial letters for appeals, and patient-supporting documents.
 4. Store document metadata, pages, chunks, checksums, and vector IDs in the database.
 5. Extract payer criteria from payer policy documents.
 6. Match patient-document evidence against extracted criteria.
 7. Generate a readiness report that describes documentation completeness.
-8. Generate a prior-auth draft using verified evidence only.
+8. Generate a prior-auth or appeal draft using verified evidence only.
 9. Verify citations and require human review before approval.
 10. Keep audit events for case changes, uploads, AI runs, reviewer edits, citation checks, and approvals.
 
@@ -34,15 +34,16 @@ Implemented:
 - Organization-scoped cases, typed documents, document pages, document chunks, analysis runs, criteria, evidence matches, readiness reports, drafts, citation checks, and audit events.
 - Pinecone vector indexing for uploaded PDF chunks, with database records as the source of truth.
 - Prior-auth criteria extraction, evidence matching, readiness report generation, draft generation, citation verification, and draft approval gates in the backend.
-- Next.js workspace with account flows, case list, case detail workflow, typed upload, criteria/evidence/readiness/draft views, and backend proxy routes.
+- Appeal draft generation from denial-letter uploads, including denial-reason citations and appeal-case checks.
+- Next.js workspace with account flows, case list, prior-auth and appeal case creation, case detail workflow, typed upload, criteria/evidence/readiness/draft views, export controls, and backend proxy routes.
 - Synthetic golden-case fixture runner and cross-tenant direct-ID regression tests.
+- Readiness, letter, and packet markdown exports with persisted manifests and download routes.
 - Legacy `/api/upload_pdf/` and `/api/queries/` routes for the original PDF Q&A flow.
 
 Next implementation phases:
 
-- Implement the appeal path from denial-letter upload through appeal draft generation.
 - Add a structured LLM gateway with schema validation and fail-closed analysis runs.
-- Expand synthetic evals, red-team fixtures, dependency audits, and production security gates.
+- Expand synthetic evals, red-team fixtures, dependency audits, security scans, CI, and production deployment gates.
 - Defer OCR, async workers, object storage, admin analytics, EHR/FHIR, payer submission, and real PHI readiness until after the MVP is stable.
 
 ## Runtime Architecture
@@ -93,6 +94,8 @@ Retrieval isolation:
 - Evidence matching reads patient documents only.
 - Evidence status `met` is invalid without source quote, source file, source page, and rationale.
 - Drafts must use verified evidence and keep the human-review disclaimer.
+- Appeal drafts require an appeal case, an uploaded denial letter, and a readiness report.
+- Appeal denial reasons must cite the denial-letter file and page; patient-evidence claims must cite verified patient evidence.
 
 ## Project Layout
 
@@ -131,7 +134,7 @@ Prior-auth workflow:
 - `POST /api/cases/{case_id}/reports/readiness`
 - `GET /api/cases/{case_id}/reports/latest`
 - `POST /api/cases/{case_id}/drafts/prior-auth`
-- `POST /api/cases/{case_id}/drafts/appeal` currently returns `501` after auth and case-scope checks until appeals are implemented.
+- `POST /api/cases/{case_id}/drafts/appeal`
 - `GET /api/cases/{case_id}/drafts`
 - `GET/PATCH /api/drafts/{draft_id}`
 - `POST /api/drafts/{draft_id}/verify-citations`
@@ -294,8 +297,8 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 1. Phase 0 - Implemented: executable eval and tenant-isolation guardrails.
 2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
 3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
-4. Phase 3 - Next: implement denial-letter appeal workflow.
-5. Phase 4 - Add structured LLM gateway and expanded eval runner.
+4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
+5. Phase 4 - Next: add structured LLM gateway and expanded eval runner.
 6. Phase 5 - Harden auth/session behavior, security scans, CI, and deployment gates.
 
 Deferred capabilities include OCR fallback, async processing workers, object storage, admin analytics, EHR/FHIR integration, payer submission, and real PHI production readiness.

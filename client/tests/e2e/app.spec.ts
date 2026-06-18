@@ -4,6 +4,7 @@ type WorkspaceMockOptions = {
   caseType?: "prior_auth" | "appeal";
   documents?: Array<Record<string, unknown>>;
   drafts?: Array<Record<string, unknown>>;
+  role?: "admin" | "coordinator" | "clinician_reviewer" | "viewer";
 };
 
 async function mockAuthenticatedReviewerWorkspace(page: Page, options: WorkspaceMockOptions = {}) {
@@ -46,7 +47,7 @@ async function mockAuthenticatedReviewerWorkspace(page: Page, options: Workspace
         id: "user_1",
         email: "reviewer@example.test",
         name: "Reviewer",
-        role: "clinician_reviewer",
+        role: options.role ?? "clinician_reviewer",
         organization: { id: "org_1", name: "Review Clinic", plan: "test" }
       })
     });
@@ -250,6 +251,7 @@ test.describe("PriorAuth Evidence Copilot", () => {
   test("generates appeal drafts from appeal cases with denial letters", async ({ page }) => {
     await mockAuthenticatedReviewerWorkspace(page, {
       caseType: "appeal",
+      role: "coordinator",
       documents: [
         {
           id: "doc_denial_1",

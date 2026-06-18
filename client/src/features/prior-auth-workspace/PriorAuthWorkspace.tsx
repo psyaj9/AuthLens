@@ -352,9 +352,8 @@ export function PriorAuthWorkspace() {
     [cases, selectedCaseId]
   );
   const approvedDraftAvailable = drafts.some((draft) => draft.status === "approved");
-  const appealDraftAvailable =
-    selectedCase?.case_type === "appeal" ||
-    documents.some((document) => document.document_type === "denial_letter");
+  const appealDraftAvailable = selectedCase?.case_type === "appeal";
+  const canGenerateDraft = user?.role === "admin" || user?.role === "coordinator";
 
   const refreshCases = useCallback(async () => {
     const nextCases = await listCases();
@@ -979,12 +978,15 @@ export function PriorAuthWorkspace() {
                 <PanelHeader
                   action={
                     <div className="flex flex-wrap gap-2">
-                      <Button disabled={!selectedCase} onClick={handleDraft}>
+                      <Button
+                        disabled={!selectedCase || selectedCase.case_type !== "prior_auth" || !canGenerateDraft}
+                        onClick={handleDraft}
+                      >
                         <FileText aria-hidden className="h-4 w-4" />
                         Draft prior auth
                       </Button>
                       <Button
-                        disabled={!selectedCase || !appealDraftAvailable}
+                        disabled={!selectedCase || !appealDraftAvailable || !canGenerateDraft}
                         onClick={handleAppealDraft}
                         variant="secondary"
                       >

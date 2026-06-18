@@ -45,6 +45,7 @@ STOPWORDS = {
 }
 BANNED_DRAFT_TERMS = {"guaranteed approval", "must approve", "approved for coverage", "this patient qualifies"}
 REQUIRED_DRAFT_DISCLAIMER = "clinician review is required"
+APPEAL_DENIAL_REASON_LABEL = "denial reason identified from payer letter"
 
 
 def _case(db: Session, case_id: str, organization_id: str) -> PriorAuthCase:
@@ -101,12 +102,31 @@ def _short_quote(text: str, limit: int = 220) -> str:
     return normalized[:limit]
 
 
-def _denial_reason_from_chunks(chunks: list[DocumentChunk]) -> str:
+def _citation_for_chunk(db: Session, chunk: DocumentChunk) -> str:
+    document = _document(db, chunk.document_id)
+    return f"{document.file_name}, page {chunk.page_start}"
+
+
+def _denial_reason_from_chunks(db: Session, chunks: list[DocumentChunk]) -> tuple[str, str]:
     for chunk in chunks:
         for sentence in _sentences(chunk.text):
             if re.search(r"\b(denied|denial|not medically necessary|lack|missing|insufficient)\b", sentence, re.I):
-                return _short_quote(sentence, 240)
-    return "The denial reason was not clearly extracted from the uploaded denial letter."
+                return _short_quote(sentence, 240), _citation_for_chunk(db, chunk)
+    return (
+        "The denial reason was not clearly extracted from the uploaded denial letter.",
+        _citation_for_chunk(db, chunks[0]),
+    )
+
+
+def _citations_in_text(text: str) -> set[str]:
+    return {citation.lower() for citation in re.findall(r"\[([^\]]+)\]", text)}
+
+
+def _appeal_denial_reason_line(content: str) -> str | None:
+    for line in content.splitlines():
+        if APPEAL_DENIAL_REASON_LABEL in line.lower():
+            return line
+    return None
 
 
 def _effective_match_status(match: EvidenceMatch) -> str:
@@ -490,6 +510,11 @@ def latest_report(db: Session, *, case_id: str, organization_id: str) -> Readine
 
 def create_prior_auth_draft(db: Session, *, case_id: str, organization_id: str, user_id: str) -> DraftLetter:
     case = _case(db, case_id, organization_id)
+    if case.case_type != "prior_auth":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Prior authorization drafts require a prior-auth case",
+        )
     report = latest_report(db, case_id=case.id, organization_id=organization_id)
     matches = [
         match
@@ -547,7 +572,8 @@ def create_prior_auth_draft(db: Session, *, case_id: str, organization_id: str, 
 
 def create_appeal_draft(db: Session, *, case_id: str, organization_id: str, user_id: str) -> DraftLetter:
     case = _case(db, case_id, organization_id)
-    report = latest_report(db, case_id=case.id, organization_id=organization_id)
+    if case.case_type != "appeal":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Appeal drafts require an appeal case")
     denial_chunks = _chunks(
         db,
         case_id=case.id,
@@ -556,7 +582,8 @@ def create_appeal_draft(db: Session, *, case_id: str, organization_id: str, user
     )
     if not denial_chunks:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a denial letter before drafting an appeal")
-    denial_reason = _denial_reason_from_chunks(denial_chunks)
+    report = latest_report(db, case_id=case.id, organization_id=organization_id)
+    denial_reason, denial_citation = _denial_reason_from_chunks(db, denial_chunks)
     matches = [
         match
         for match in list_matches(db, case_id=case.id, organization_id=organization_id)
@@ -567,7 +594,7 @@ def create_appeal_draft(db: Session, *, case_id: str, organization_id: str, user
         "",
         f"This draft is prepared for clinician review for synthetic appeal case {case.patient_label}.",
         "",
-        f"Denial reason identified from payer letter: {denial_reason}",
+        f"Denial reason identified from payer letter: {denial_reason} [{denial_citation}]",
         "",
         "Evidence for reviewer consideration:",
     ]
@@ -660,18 +687,31 @@ def update_draft(db: Session, *, draft_id: str, organization_id: str, user_id: s
 def verify_citations(db: Session, *, draft_id: str, organization_id: str, user_id: str) -> CitationCheck:
     draft = get_draft(db, draft_id=draft_id, organization_id=organization_id)
     matches = list_matches(db, case_id=draft.case_id, organization_id=organization_id)
-    valid_citations = {
+    valid_evidence_citations = {
         f"{match.source_file}, page {match.source_page}".lower()
         for match in matches
         if _is_citation_backed_met(match)
     }
-    found_citations = {citation.lower() for citation in re.findall(r"\[([^\]]+)\]", draft.content_markdown)}
+    valid_denial_citations = set()
+    if draft.letter_type == "appeal":
+        valid_denial_citations = {
+            _citation_for_chunk(db, chunk).lower()
+            for chunk in _chunks(
+                db,
+                case_id=draft.case_id,
+                organization_id=organization_id,
+                document_types={"denial_letter"},
+            )
+        }
+    valid_citations = valid_evidence_citations.union(valid_denial_citations)
+    found_citations = _citations_in_text(draft.content_markdown)
     citation_errors = [
-        {"citation": citation, "issue": "Citation does not match verified evidence"}
+        {"citation": citation, "issue": "Citation does not match verified evidence or denial letter"}
         for citation in sorted(found_citations)
         if citation not in valid_citations
     ]
     unsupported_claims = []
+    lowered = draft.content_markdown.lower()
     if "provided documents indicate" in draft.content_markdown.lower() and not found_citations:
         unsupported_claims.append(
             {
@@ -680,7 +720,25 @@ def verify_citations(db: Session, *, draft_id: str, organization_id: str, user_i
                 "recommended_fix": "Add source file and page citation.",
             }
         )
-    lowered = draft.content_markdown.lower()
+    if draft.letter_type == "appeal":
+        denial_reason_line = _appeal_denial_reason_line(draft.content_markdown)
+        denial_reason_citations = _citations_in_text(denial_reason_line or "")
+        if denial_reason_line is None:
+            unsupported_claims.append(
+                {
+                    "claim": "Denial reason identified from payer letter",
+                    "issue": "Appeal draft is missing the required denial-reason line",
+                    "recommended_fix": "Restore the denial reason with a denial letter file and page citation.",
+                }
+            )
+        elif not denial_reason_citations.intersection(valid_denial_citations):
+            unsupported_claims.append(
+                {
+                    "claim": "Denial reason identified from payer letter",
+                    "issue": "Appeal denial reason requires a denial-letter citation",
+                    "recommended_fix": "Add the denial letter file and page citation.",
+                }
+            )
     for term in BANNED_DRAFT_TERMS:
         if term in lowered:
             unsupported_claims.append(
