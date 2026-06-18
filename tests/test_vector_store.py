@@ -197,6 +197,26 @@ class VectorStoreTests(unittest.TestCase):
         embeddings_cls.return_value.embed_documents.assert_not_called()
         index.upsert.assert_not_called()
 
+    def test_delete_priorauth_vectors_deletes_ids_in_org_namespace(self):
+        index = MagicMock()
+
+        with patch.dict(
+            os.environ,
+            {
+                "GOOGLE_API_KEY": "test-google-key",
+                "PINECONE_API_KEY": "test-pinecone-key",
+                "PINECONE_ENVIRONMENT": "us-east-1",
+                "PINECONE_INDEX_NAME": "authlens-test",
+                "ENVIRONMENT": "development",
+            },
+            clear=False,
+        ), patch.object(
+            self.vector_store, "get_pinecone_index", return_value=(index, "authlens-test")
+        ):
+            self.vector_store.delete_priorauth_vectors(["vec_1", "vec_2"], "org_123")
+
+        index.delete.assert_called_once_with(ids=["vec_1", "vec_2"], namespace="org_123")
+
 
 if __name__ == "__main__":
     unittest.main()

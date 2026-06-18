@@ -194,3 +194,28 @@ def upsert_priorauth_chunks(chunks: list[dict[str, Any]]) -> None:
     logger.info(
         f"Uploaded {len(vectors)} prior-auth vectors to Pinecone index {pinecone_index_name}."
     )
+
+
+def delete_priorauth_vectors(vector_ids: list[str], organization_id: str) -> None:
+    if not vector_ids:
+        return
+
+    if os.getenv("ENVIRONMENT", "").strip().lower() == "test":
+        logger.info("Skipping Pinecone delete for prior-auth chunks in test environment.")
+        return
+
+    required_env = [
+        "GOOGLE_API_KEY",
+        "PINECONE_API_KEY",
+        "PINECONE_ENVIRONMENT",
+        "PINECONE_INDEX_NAME",
+    ]
+    if any(os.getenv(name) is None for name in required_env):
+        logger.info("Skipping Pinecone delete for prior-auth chunks; vector store is not configured.")
+        return
+
+    pinecone_index, pinecone_index_name = get_pinecone_index()
+    pinecone_index.delete(ids=vector_ids, namespace=str(organization_id))
+    logger.info(
+        f"Deleted {len(vector_ids)} prior-auth vectors from Pinecone index {pinecone_index_name}."
+    )

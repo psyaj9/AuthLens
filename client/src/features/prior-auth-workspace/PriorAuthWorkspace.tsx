@@ -27,6 +27,7 @@ import {
   createPacketExport,
   createPriorAuthDraft,
   createReadinessExport,
+  deleteDocument,
   extractCriteria,
   forgotPassword,
   generateReadinessReport,
@@ -544,6 +545,26 @@ export function PriorAuthWorkspace() {
     }, "Document uploaded and indexed.");
   }
 
+  function handleDeleteDocument(document: CaseDocument) {
+    if (!selectedCase) return;
+
+    const confirmed = window.confirm(
+      `Delete ${document.file_name} from this case? Generated criteria, evidence, readiness reports, drafts, and exports will need to be regenerated.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    void runAction(async () => {
+      await deleteDocument(document.id);
+      setReport(null);
+      setCitationCheck(null);
+      setExportArtifacts([]);
+      await refreshCaseArtifacts(selectedCase.id);
+      await refreshCases();
+    }, "Document deleted.");
+  }
+
   function handleExtractCriteria() {
     if (!selectedCase) return;
     void runAction(async () => {
@@ -864,13 +885,14 @@ export function PriorAuthWorkspace() {
                     </Button>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[620px] border-collapse text-sm">
+                    <table className="w-full min-w-[720px] border-collapse text-sm">
                       <thead>
                         <tr className="border-b border-[var(--border)] text-left text-xs uppercase text-[var(--muted)]">
                           <th className="py-2 pr-3">File</th>
                           <th className="py-2 pr-3">Type</th>
                           <th className="py-2 pr-3">Pages</th>
                           <th className="py-2 pr-3">Status</th>
+                          {canManageCases ? <th className="py-2 pl-3 text-right">Action</th> : null}
                         </tr>
                       </thead>
                       <tbody>
@@ -884,6 +906,19 @@ export function PriorAuthWorkspace() {
                                 {formatStatusLabel(document.processing_status)}
                               </StatusPill>
                             </td>
+                            {canManageCases ? (
+                              <td className="py-3 pl-3 text-right">
+                                <button
+                                  className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-[#e4c7c4] bg-white px-2.5 text-xs font-semibold text-[var(--danger)] hover:bg-[#fff1f0] disabled:cursor-not-allowed disabled:opacity-60"
+                                  disabled={status === "loading"}
+                                  onClick={() => handleDeleteDocument(document)}
+                                  type="button"
+                                >
+                                  <Trash2 aria-hidden className="h-3.5 w-3.5" />
+                                  Delete
+                                </button>
+                              </td>
+                            ) : null}
                           </tr>
                         ))}
                       </tbody>

@@ -91,6 +91,10 @@ export async function proxyBackendJson(
       return errorResponse(error.error, error.status);
     }
 
+    if (backendResponse.status === 204) {
+      return new Response(null, { status: 204 });
+    }
+
     const payload = await readJsonOrText(backendResponse);
     return NextResponse.json(typeof payload === "string" ? { message: payload } : payload);
   } catch {

@@ -10,6 +10,7 @@ import {
   createPacketExport,
   createPriorAuthDraft,
   createReadinessExport,
+  deleteDocument,
   forgotPassword,
   loginUser,
   overrideEvidenceMatch,
@@ -278,6 +279,18 @@ describe("client API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/cases/case_123/archive",
       expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("deletes uploaded documents through the local document route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await deleteDocument("doc_123");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/documents/doc_123",
+      expect.objectContaining({ method: "DELETE" })
     );
   });
 

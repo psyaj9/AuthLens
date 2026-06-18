@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,7 +7,7 @@ from dependencies.auth import CurrentUser, get_current_user, require_roles
 from models.priorauth import Document
 from modules.schemas import DocumentListResponse, DocumentResponse
 from routes.cases import get_case_for_user
-from services.documents import create_case_document
+from services.documents import create_case_document, delete_case_document
 
 
 router = APIRouter()
@@ -80,3 +80,18 @@ async def get_document(
 
         raise HTTPException(status_code=404, detail="Document not found")
     return document_response(document)
+
+
+@router.delete("/documents/{document_id}", status_code=204)
+async def delete_document(
+    document_id: str,
+    current_user: CurrentUser = Depends(require_roles("admin", "coordinator")),
+    db: Session = Depends(get_db),
+):
+    delete_case_document(
+        db,
+        document_id=document_id,
+        organization_id=current_user.organization_id,
+        user_id=current_user.user_id,
+    )
+    return Response(status_code=204)

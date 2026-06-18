@@ -4,9 +4,23 @@ from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
 from langchain_community.document_loaders import PyPDFLoader
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from models.priorauth import Document, DocumentChunk, DocumentPage, PriorAuthCase
+from logger import logger
+from models.priorauth import (
+    AnalysisRun,
+    CitationCheck,
+    Document,
+    DocumentChunk,
+    DocumentPage,
+    DraftLetter,
+    EvidenceMatch,
+    ExportArtifact,
+    PolicyCriterion,
+    PriorAuthCase,
+    ReadinessReport,
+)
 from modules.config import (
     format_upload_mb,
     get_max_document_chunks,
@@ -16,6 +30,7 @@ from modules.config import (
     get_max_upload_mb,
 )
 from modules.vector_store import upsert_priorauth_chunks
+from modules.vector_store import delete_priorauth_vectors
 from services.audit import log_audit_event
 
 
@@ -221,3 +236,119 @@ def create_case_document(
     db.commit()
     db.refresh(document)
     return document
+
+
+def _remove_uploaded_file(file_uri: str) -> None:
+    try:
+        file_path = Path(file_uri).resolve()
+        file_path.relative_to(UPLOAD_DIR.resolve())
+    except (OSError, ValueError):
+        return
+
+    try:
+        file_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning(f"Unable to remove deleted document file: {exc}")
+
+
+def _delete_case_analysis_outputs(db: Session, *, case_id: str, organization_id: str) -> None:
+    draft_ids = list(
+        db.scalars(
+            select(DraftLetter.id).where(
+                DraftLetter.case_id == case_id,
+                DraftLetter.organization_id == organization_id,
+            )
+        )
+    )
+    if draft_ids:
+        db.execute(
+            delete(CitationCheck).where(
+                CitationCheck.draft_letter_id.in_(draft_ids),
+                CitationCheck.organization_id == organization_id,
+            )
+        )
+
+    for model in (
+        ExportArtifact,
+        DraftLetter,
+        ReadinessReport,
+        EvidenceMatch,
+        PolicyCriterion,
+        AnalysisRun,
+    ):
+        db.execute(
+            delete(model).where(
+                model.case_id == case_id,
+                model.organization_id == organization_id,
+            )
+        )
+
+
+def delete_case_document(
+    db: Session,
+    *,
+    document_id: str,
+    organization_id: str,
+    user_id: str,
+) -> None:
+    document = db.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.organization_id == organization_id,
+        )
+    )
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    case = db.get(PriorAuthCase, document.case_id)
+    vector_ids = list(
+        db.scalars(
+            select(DocumentChunk.vector_id).where(
+                DocumentChunk.document_id == document.id,
+                DocumentChunk.organization_id == organization_id,
+            )
+        )
+    )
+    remaining_document_count = db.scalar(
+        select(func.count())
+        .select_from(Document)
+        .where(
+            Document.case_id == document.case_id,
+            Document.organization_id == organization_id,
+            Document.id != document.id,
+        )
+    )
+    file_uri = document.file_uri
+
+    delete_priorauth_vectors(vector_ids, organization_id)
+    _delete_case_analysis_outputs(db, case_id=document.case_id, organization_id=organization_id)
+    db.execute(
+        delete(DocumentPage).where(
+            DocumentPage.document_id == document.id,
+            DocumentPage.organization_id == organization_id,
+        )
+    )
+    db.execute(
+        delete(DocumentChunk).where(
+            DocumentChunk.document_id == document.id,
+            DocumentChunk.organization_id == organization_id,
+        )
+    )
+    db.delete(document)
+
+    if case is not None and case.organization_id == organization_id:
+        case.readiness_score = None
+        case.status = "documents_uploaded" if remaining_document_count else "draft"
+
+    log_audit_event(
+        db,
+        organization_id=organization_id,
+        case_id=document.case_id,
+        user_id=user_id,
+        action="document.deleted",
+        entity_type="document",
+        entity_id=document.id,
+        metadata={"document_type": document.document_type, "file_name": document.file_name},
+    )
+    db.commit()
+    _remove_uploaded_file(file_uri)

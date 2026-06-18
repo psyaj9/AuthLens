@@ -675,6 +675,99 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(payload["processing_status"], "indexed")
         self.assertEqual(payload["page_count"], 1)
 
+    def test_delete_case_document_removes_document_rows_file_and_audits(self):
+        client = self._client()
+        token = self._login(client)
+        case_id = self._create_case(client, token, "SYN-LMRI-DELETE-DOC")
+        uploaded = self._upload_document(
+            client,
+            token,
+            case_id,
+            "patient_note",
+            "note.pdf",
+            b"%PDF-1.4\nPatient note documents conservative therapy.",
+        )
+        document_id = uploaded["id"]
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+
+        with session.SessionLocal() as db:
+            stored_document = db.get(models.Document, document_id)
+            self.assertIsNotNone(stored_document)
+            file_path = Path(stored_document.file_uri)
+            self.assertTrue(file_path.exists())
+            page_count = db.scalar(
+                sqlalchemy.select(sqlalchemy.func.count())
+                .select_from(models.DocumentPage)
+                .where(models.DocumentPage.document_id == document_id)
+            )
+            chunk_count = db.scalar(
+                sqlalchemy.select(sqlalchemy.func.count())
+                .select_from(models.DocumentChunk)
+                .where(models.DocumentChunk.document_id == document_id)
+            )
+            self.assertEqual(page_count, 1)
+            self.assertEqual(chunk_count, 1)
+
+        response = client.delete(
+            f"/api/documents/{document_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, 204, response.text)
+        self.assertEqual(response.content, b"")
+        self.assertFalse(file_path.exists())
+        with session.SessionLocal() as db:
+            self.assertIsNone(db.get(models.Document, document_id))
+            self.assertEqual(
+                db.scalar(
+                    sqlalchemy.select(sqlalchemy.func.count())
+                    .select_from(models.DocumentPage)
+                    .where(models.DocumentPage.document_id == document_id)
+                ),
+                0,
+            )
+            self.assertEqual(
+                db.scalar(
+                    sqlalchemy.select(sqlalchemy.func.count())
+                    .select_from(models.DocumentChunk)
+                    .where(models.DocumentChunk.document_id == document_id)
+                ),
+                0,
+            )
+            audit_count = db.scalar(
+                sqlalchemy.select(sqlalchemy.func.count())
+                .select_from(models.AuditEvent)
+                .where(
+                    models.AuditEvent.action == "document.deleted",
+                    models.AuditEvent.entity_id == document_id,
+                )
+            )
+            self.assertEqual(audit_count, 1)
+
+    def test_viewer_cannot_delete_case_documents(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        viewer_token = self._login(client, email="viewer@test.authlens.local")
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-DELETE-DOC-VIEWER")
+        uploaded = self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "patient_note",
+            "note.pdf",
+            b"%PDF-1.4\nPatient note documents conservative therapy.",
+        )
+
+        response = client.delete(
+            f"/api/documents/{uploaded['id']}",
+            headers={"Authorization": f"Bearer {viewer_token}"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"error": "Insufficient role"})
+
     def test_typed_document_upload_enforces_size_limit(self):
         client = self._client()
         token = self._login(client)
@@ -2200,6 +2293,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
             ("archive case", lambda: client.post(f"/api/cases/{case_id}/archive", headers=headers)),
             ("list documents", lambda: client.get(f"/api/cases/{case_id}/documents", headers=headers)),
             ("get document", lambda: client.get(f"/api/documents/{document_id}", headers=headers)),
+            ("delete document", lambda: client.delete(f"/api/documents/{document_id}", headers=headers)),
             ("extract criteria", lambda: client.post(f"/api/cases/{case_id}/criteria/extract", headers=headers)),
             ("list criteria", lambda: client.get(f"/api/cases/{case_id}/criteria", headers=headers)),
             (

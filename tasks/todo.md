@@ -1,5 +1,17 @@
 # Next PRD Implementation Phases
 
+## Uploaded Document Deletion
+
+- [x] Add failing backend coverage for deleting an uploaded case document, including child rows and tenant/role boundaries.
+- [x] Add failing client/proxy coverage for deleting a document from the workspace.
+- [x] Implement the backend document delete service/route and local Next proxy/client helper.
+- [x] Add the document-row delete control and refresh behavior in the prior-auth workspace.
+- [ ] Run focused backend/client verification.
+
+## Review
+
+- Pending.
+
 ## Production UI Polish And PDF Export Pass
 
 - [x] Add focused regression tests for PDF exports, case archive/delete client flow, and user-facing label formatting.

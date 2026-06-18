@@ -193,6 +193,26 @@ export async function archiveCase(caseId: string): Promise<CaseSummary> {
   return parseLocalRouteResponse(response, caseSchema);
 }
 
+export async function deleteDocument(documentId: string): Promise<void> {
+  const response = await fetch(`/api/documents/${documentId}`, {
+    method: "DELETE"
+  });
+  if (response.ok) {
+    return;
+  }
+
+  const payload = await response.json().catch(() => null);
+  const message =
+    payload &&
+    typeof payload === "object" &&
+    "error" in payload &&
+    typeof payload.error === "string"
+      ? payload.error
+      : "AuthLens request failed.";
+
+  throw new AuthLensApiError(message, response.status);
+}
+
 export async function listCaseDocuments(caseId: string): Promise<CaseDocument[]> {
   const response = await fetch(`/api/cases/${caseId}/documents`, {
     cache: "no-store"
