@@ -73,6 +73,7 @@ def create_access_token(
     user_id: str,
     organization_id: str,
     role: str,
+    token_version: int = 0,
     expires_delta: timedelta | None = None,
 ) -> str:
     now = datetime.now(UTC)
@@ -82,6 +83,7 @@ def create_access_token(
         "sub": user_id,
         "org": organization_id,
         "role": role,
+        "token_version": token_version,
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
     }

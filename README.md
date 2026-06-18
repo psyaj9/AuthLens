@@ -95,12 +95,13 @@ Current scope:
 - Criteria extraction, evidence matching, and readiness report generation have opt-in LLM branches behind `PRIORAUTH_ANALYSIS_MODE=llm`; deterministic analysis stays active by default and does not require a live LLM call.
 - LLM evidence matching cites patient documents only. The service grounds each cited file, page, and quote to organization-scoped patient-document chunks before replacing stored matches.
 - LLM readiness keeps deterministic documentation-completeness scoring as the source of truth; the model can structure the summary, highest-risk items, and reviewer next steps.
+- The synthetic smoke eval runner now scores expected criteria coverage, evidence status outcomes, missing-item recall, prompt-injection handling, readiness status, draft safety, and citation verification. It forces deterministic analysis so the offline smoke gate never calls a live LLM provider.
 - Failed structured output stores schema/error-type metadata only. Raw PDF text, raw model output, and provider exception text are not stored in failure metadata.
 - `PRIORAUTH_LLM_MODEL` selects the structured-analysis Groq model when set; otherwise the gateway falls back to `GROQ_MODEL`, then `llama-3.1-8b-instant`.
 
 Remaining Phase 4 work:
 
-- Expand the eval runner from smoke checks into expected criteria, evidence statuses, missing-item, and prompt-injection outcome checks.
+- Grow the synthetic eval dataset toward the PRD target set: more payer policies, patient packets, denial letters, gold criteria, gold evidence matches, gold missing items, and letter constraints.
 
 ## Prior-Auth Workflow
 
@@ -289,6 +290,7 @@ Focused PRD guardrails:
 .\.venv\Scripts\python.exe -m unittest tests.test_phase7_eval_gate
 .\.venv\Scripts\python.exe -m unittest tests.test_llm_gateway
 .\.venv\Scripts\python.exe -m unittest tests.test_priorauth_workflow.PriorAuthWorkflowTests.test_cross_tenant_direct_id_routes_are_denied
+.\.venv\Scripts\python.exe server\evals\run_synthetic_eval.py
 ```
 
 Client checks:
@@ -359,7 +361,7 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
 3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
 4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
-5. Phase 4 - In progress: structured Groq provider boundary and opt-in criteria/evidence/readiness branches are implemented; expanded eval scoring remains.
+5. Phase 4 - In progress: structured Groq provider boundary, opt-in criteria/evidence/readiness branches, and expanded smoke-eval scoring are implemented; larger PRD eval dataset growth remains.
 6. Phase 5 - Harden auth/session behavior, security scans, CI, and deployment gates.
 
 Deferred capabilities include OCR fallback, async processing workers, object storage, admin analytics, EHR/FHIR integration, payer submission, and real PHI production readiness.

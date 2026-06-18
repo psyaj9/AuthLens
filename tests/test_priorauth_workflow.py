@@ -261,6 +261,33 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         new_login_response = client.post("/api/auth/login", json={"email": email, "password": "new-password"})
         self.assertEqual(new_login_response.status_code, 200, new_login_response.text)
 
+    def test_password_reset_invalidates_existing_access_tokens(self):
+        client = self._client()
+        email = "reset-session@example.test"
+        self._create_test_user(email=email, password="old-password", role="admin")
+        login_response = client.post("/api/auth/login", json={"email": email, "password": "old-password"})
+        self.assertEqual(login_response.status_code, 200, login_response.text)
+        old_access_token = login_response.json()["access_token"]
+
+        forgot_response = client.post("/api/auth/forgot-password", json={"email": email})
+        self.assertEqual(forgot_response.status_code, 200, forgot_response.text)
+        reset_response = client.post(
+            "/api/auth/reset-password",
+            json={"reset_token": forgot_response.json()["reset_token"], "password": "new-password"},
+        )
+        self.assertEqual(reset_response.status_code, 200, reset_response.text)
+
+        stale_me_response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {old_access_token}"})
+        self.assertEqual(stale_me_response.status_code, 401)
+
+        new_login_response = client.post("/api/auth/login", json={"email": email, "password": "new-password"})
+        self.assertEqual(new_login_response.status_code, 200, new_login_response.text)
+        fresh_me_response = client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {new_login_response.json()['access_token']}"},
+        )
+        self.assertEqual(fresh_me_response.status_code, 200, fresh_me_response.text)
+
     def test_forgot_password_invalidates_previous_unused_reset_tokens(self):
         client = self._client()
         email = "reset-rotate@example.test"

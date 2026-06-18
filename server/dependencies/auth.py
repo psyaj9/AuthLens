@@ -38,6 +38,10 @@ def get_current_user(
     payload = decode_access_token(credentials.credentials)
     user_id = str(payload.get("sub", ""))
     organization_id = str(payload.get("org", ""))
+    try:
+        token_version = int(payload.get("token_version", 0))
+    except (TypeError, ValueError):
+        token_version = -1
     membership = db.scalar(
         select(OrganizationMembership).where(
             OrganizationMembership.user_id == user_id,
@@ -47,6 +51,12 @@ def get_current_user(
     user = db.get(User, user_id)
     organization = db.get(Organization, organization_id)
     if membership is None or user is None or organization is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if token_version != user.token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",

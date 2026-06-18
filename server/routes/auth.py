@@ -65,6 +65,7 @@ async def login(payload: LoginRequest, db: Session = Depends(get_db)):
         user_id=user.id,
         organization_id=organization.id,
         role=membership.role,
+        token_version=user.token_version,
     )
     log_audit_event(
         db,
@@ -110,7 +111,12 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         entity_id=user.id,
         metadata={"role": membership.role},
     )
-    token = create_access_token(user_id=user.id, organization_id=organization.id, role=membership.role)
+    token = create_access_token(
+        user_id=user.id,
+        organization_id=organization.id,
+        role=membership.role,
+        token_version=user.token_version,
+    )
     db.commit()
     db.refresh(user)
     db.refresh(organization)
@@ -174,6 +180,7 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
 
     membership = db.scalar(select(OrganizationMembership).where(OrganizationMembership.user_id == user.id))
     user.password_hash = hash_password(payload.password)
+    user.token_version += 1
     token_record.used_at = now
     remaining_tokens = db.scalars(
         select(PasswordResetToken).where(

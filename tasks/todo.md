@@ -26,7 +26,7 @@
 - Phase 3 verification passed after review fixes: backend unittest discovery with 67 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
 - Phase 4 foundation is now started but not complete: added `server/services/llm_gateway.py`, `server/services/analysis_schemas.py`, Pydantic structured-output parsing, untrusted-document prompt framing, redacted failed `AnalysisRun` recording, and an opt-in `PRIORAUTH_ANALYSIS_MODE=llm` criteria extraction branch.
 - Phase 4 focused verification passed after review fixes: `tests.test_llm_gateway` with 9 tests, seven LLM criteria integration tests for valid output, invalid output, ungrounded citations, blank source quotes, empty output, repeated provider failures, and provider failures with underlying causes; backend unittest discovery with 83 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
-- Remaining Phase 4 scope: expand eval scoring beyond smoke readiness/citation/safety checks.
+- Remaining Phase 4 scope: grow the synthetic eval dataset toward the PRD target set beyond the current 3-case smoke gate.
 - Current Phase 4 provider-boundary slice:
   - [x] Add tests for the Groq JSON-schema request boundary and direct SDK dependency.
   - [x] Implement `generate_structured_output` through the Groq SDK while preserving fail-closed behavior and redacted errors.
@@ -42,6 +42,12 @@
 - Phase 4 evidence/readiness LLM verification passed: focused Phase 4 tests passed 27 tests, backend unittest discovery passed 95 tests, client lint/typecheck passed, Vitest passed 47 tests across 10 files, Next production build passed, and Playwright desktop/mobile e2e passed 8 tests.
 - Phase 4 evidence/readiness review fixes added fail-closed coverage for duplicate LLM criterion codes, duplicate stored criterion codes, and unsafe readiness list text; focused `tests.test_llm_gateway` plus `tests.test_priorauth_workflow` passed 52 tests after fixes.
 - Phase 4 evidence/readiness review-fix backend discovery passed 98 tests.
+- Current Phase 4 expanded eval scoring slice:
+  - [x] Add executable scoring for expected criteria coverage, evidence status outcomes, missing-item recall, and prompt-injection handling.
+  - [x] Keep the smoke eval deterministic even when `PRIORAUTH_ANALYSIS_MODE=llm` is set locally.
+  - [x] Update README and task tracker for implemented smoke-set scoring and remaining PRD dataset growth.
+  - [x] Verify focused eval gate and backend discovery.
+- Phase 4 expanded eval scoring verification passed: `tests.test_phase7_eval_gate` passed 3 tests, focused eval/gateway/workflow verification passed 55 tests, and backend unittest discovery passed 99 tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

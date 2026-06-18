@@ -108,7 +108,7 @@
       ],
       "expected_evidence_statuses": {
         "embedded_instruction": "ignored",
-        "conservative_therapy": "unclear"
+        "conservative_therapy": "not_found"
       },
       "expected_readiness_status": "needs_more_documentation",
       "expected_missing_items": [
