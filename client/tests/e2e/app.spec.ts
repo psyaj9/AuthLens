@@ -278,4 +278,180 @@ test.describe("PriorAuth Evidence Copilot", () => {
     await expect(page.getByText("[denial.pdf, page 1]")).toBeVisible();
     await expect(page.getByText("Clinician review is required")).toBeVisible();
   });
+
+  test("clears generated readiness details when switching to a blank case", async ({ page }) => {
+    const caseOne = {
+      id: "case_ready",
+      patient_label: "SYN-LMRI-READY",
+      payer_name: "Example Health Plan",
+      plan_name: null,
+      specialty: "Radiology",
+      requested_service: "Lumbar spine MRI",
+      service_code: "72148",
+      diagnosis_summary: null,
+      case_type: "prior_auth",
+      status: "ready_for_review",
+      readiness_score: 90,
+      missing_required_criteria_count: 0,
+      assigned_to_user_id: null,
+      created_at: "2026-06-18T00:00:00Z",
+      updated_at: "2026-06-18T00:00:00Z"
+    };
+    const caseTwo = {
+      ...caseOne,
+      id: "case_blank",
+      patient_label: "SYN-LMRI-BLANK",
+      status: "draft",
+      readiness_score: null
+    };
+    const readinessPanel = page.locator('section[aria-labelledby="readiness-heading"]');
+
+    await page.route("**/api/auth/me", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "user_1",
+          email: "coordinator@example.test",
+          name: "Coordinator",
+          role: "coordinator",
+          organization: { id: "org_1", name: "Review Clinic", plan: "test" }
+        })
+      });
+    });
+    await page.route("**/api/cases", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ cases: [caseOne, caseTwo] })
+      });
+    });
+    for (const caseId of ["case_ready", "case_blank"]) {
+      await page.route(`**/api/cases/${caseId}/documents`, async (route) => {
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ documents: [] }) });
+      });
+      await page.route(`**/api/cases/${caseId}/criteria`, async (route) => {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            criteria:
+              caseId === "case_ready"
+                ? [
+                    {
+                      id: "crit_ready_1",
+                      criterion_code: "C1",
+                      criterion_type: "documentation",
+                      requirement: "Coverage requires six weeks of conservative therapy.",
+                      required_evidence: ["Therapy dates"],
+                      is_required: true,
+                      source_file: "policy.pdf",
+                      source_page: "1",
+                      source_quote: "Coverage requires six weeks of conservative therapy.",
+                      confidence: 0.82,
+                      ambiguity_notes: [],
+                      reviewer_status: "reviewed"
+                    }
+                  ]
+                : []
+          })
+        });
+      });
+      await page.route(`**/api/cases/${caseId}/evidence`, async (route) => {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            matches:
+              caseId === "case_ready"
+                ? [
+                    {
+                      id: "match_ready_1",
+                      criterion_id: "crit_ready_1",
+                      status: "met",
+                      evidence_summary: "Patient documentation supports C1.",
+                      source_file: "note.pdf",
+                      source_page: "2",
+                      source_quote: "Six weeks of therapy are documented.",
+                      why_it_matters: "Reviewer should confirm the citation.",
+                      missing_evidence: [],
+                      conflicting_evidence: [],
+                      recommended_action: "Clinician reviewer should confirm the cited evidence before submission.",
+                      confidence: 0.86,
+                      reviewer_override_status: null,
+                      reviewer_override_reason: null
+                    }
+                  ]
+                : []
+          })
+        });
+      });
+      await page.route(`**/api/cases/${caseId}/drafts`, async (route) => {
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ drafts: [] }) });
+      });
+    }
+    await page.route("**/api/cases/case_ready/reports/readiness", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "report_ready_1",
+          case_id: "case_ready",
+          readiness_score: 90,
+          overall_status: "ready_for_review",
+          summary: "Case one readiness summary.",
+          highest_risk_items: [],
+          recommended_next_steps: ["Submit after clinician review."],
+          report_json: {},
+          created_at: "2026-06-18T00:00:00Z"
+        })
+      });
+    });
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Readiness", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Generate", exact: true }).click();
+    await expect(readinessPanel.getByText("Case one readiness summary.")).toBeVisible();
+    await expect(readinessPanel.locator("p.mt-2.text-4xl")).toHaveText("90");
+
+    await page.locator('section[aria-labelledby="cases-heading"]').getByRole("button", { name: /SYN-LMRI-BLANK/ }).click();
+
+    await expect(page.getByRole("heading", { name: "SYN-LMRI-BLANK" })).toBeVisible();
+    await expect(readinessPanel.getByText("Generate a readiness report after matching evidence.")).toBeVisible();
+    await expect(readinessPanel.getByText("Case one readiness summary.")).toBeHidden();
+    await expect(readinessPanel.locator("p.mt-2.text-4xl")).toHaveText("-");
+  });
+
+  test("lets coordinators delete uploaded documents from a case", async ({ page }) => {
+    const documents = [
+      {
+        id: "doc_note_1",
+        case_id: "case_1",
+        document_type: "patient_note",
+        file_name: "note.pdf",
+        sha256: "checksum",
+        mime_type: "application/pdf",
+        page_count: 1,
+        processing_status: "indexed",
+        extraction_method: "text",
+        created_at: "2026-06-18T00:00:00Z",
+        updated_at: "2026-06-18T00:00:00Z"
+      }
+    ];
+    let deleteRequested = false;
+    await mockAuthenticatedReviewerWorkspace(page, {
+      role: "coordinator",
+      documents
+    });
+    await page.route("**/api/documents/doc_note_1", async (route) => {
+      deleteRequested = true;
+      documents.length = 0;
+      await route.fulfill({ status: 204 });
+    });
+    await page.goto("/");
+
+    await expect(page.getByText("note.pdf")).toBeVisible();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("row", { name: /note\.pdf/i }).getByRole("button", { name: "Delete" }).click();
+
+    expect(deleteRequested).toBe(true);
+    await expect(page.getByText("Document deleted.")).toBeVisible();
+    await expect(page.getByText("note.pdf")).toBeHidden();
+  });
 });

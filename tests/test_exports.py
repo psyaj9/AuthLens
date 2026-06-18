@@ -122,7 +122,7 @@ class ExportWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["access_token"]
 
-    def _create_case(self, client, token, patient_label="SYN-LMRI-EXPORT"):
+    def _create_case(self, client, token, patient_label="SYN-LMRI-EXPORT", case_type="prior_auth"):
         response = client.post(
             "/api/cases",
             headers={"Authorization": f"Bearer {token}"},
@@ -130,8 +130,8 @@ class ExportWorkflowTests(unittest.TestCase):
                 "patient_label": patient_label,
                 "payer_name": "Example Health Plan",
                 "specialty": "Radiology",
-                "requested_service": "Lumbar spine MRI",
-                "case_type": "prior_auth",
+                "requested_service": "Lumbar spine MRI appeal" if case_type == "appeal" else "Lumbar spine MRI",
+                "case_type": case_type,
             },
         )
         self.assertEqual(response.status_code, 201, response.text)
@@ -147,8 +147,15 @@ class ExportWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()
 
-    def _prepare_analyzed_case(self, client, token):
-        case_id = self._create_case(client, token)
+    def _prepare_analyzed_case(
+        self,
+        client,
+        token,
+        patient_label="SYN-LMRI-EXPORT",
+        case_type="prior_auth",
+        include_denial_letter=False,
+    ):
+        case_id = self._create_case(client, token, patient_label=patient_label, case_type=case_type)
         self._upload_document(
             client,
             token,
@@ -165,6 +172,15 @@ class ExportWorkflowTests(unittest.TestCase):
             "note.pdf",
             b"%PDF-1.4\nThe provided documents indicate six weeks of conservative therapy and functional limitation with walking.",
         )
+        if include_denial_letter:
+            self._upload_document(
+                client,
+                token,
+                case_id,
+                "denial_letter",
+                "denial.pdf",
+                b"%PDF-1.4\nDenial reason: request denied as not medically necessary because conservative therapy was not shown.",
+            )
         for path in [
             f"/api/cases/{case_id}/criteria/extract",
             f"/api/cases/{case_id}/evidence/match",
@@ -174,13 +190,15 @@ class ExportWorkflowTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.text)
         return case_id
 
-    def _create_verified_draft(self, client, token, case_id):
+    def _create_verified_draft(self, client, token, case_id, letter_type="prior_auth"):
+        draft_path = "appeal" if letter_type == "appeal" else "prior-auth"
         draft_response = client.post(
-            f"/api/cases/{case_id}/drafts/prior-auth",
+            f"/api/cases/{case_id}/drafts/{draft_path}",
             headers={"Authorization": f"Bearer {token}"},
         )
         self.assertEqual(draft_response.status_code, 200, draft_response.text)
         draft = draft_response.json()
+        self.assertEqual(draft["letter_type"], letter_type)
         check_response = client.post(
             f"/api/drafts/{draft['id']}/verify-citations",
             headers={"Authorization": f"Bearer {token}"},
@@ -263,6 +281,48 @@ class ExportWorkflowTests(unittest.TestCase):
 
         case_response = client.get(f"/api/cases/{case_id}", headers={"Authorization": f"Bearer {coordinator_token}"})
         self.assertEqual(case_response.json()["status"], "exported")
+
+    def test_appeal_letter_and_packet_exports_use_approved_appeal_draft(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        clinician_token = self._login(client, email="clinician@test.authlens.local", role="clinician_reviewer")
+        case_id = self._prepare_analyzed_case(
+            client,
+            coordinator_token,
+            patient_label="SYN-LMRI-APPEAL-EXPORT",
+            case_type="appeal",
+            include_denial_letter=True,
+        )
+        draft = self._create_verified_draft(client, coordinator_token, case_id, letter_type="appeal")
+        approve_response = client.post(
+            f"/api/drafts/{draft['id']}/approve",
+            headers={"Authorization": f"Bearer {clinician_token}"},
+        )
+        self.assertEqual(approve_response.status_code, 200, approve_response.text)
+
+        letter_response = client.post(
+            f"/api/cases/{case_id}/exports/letter",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        packet_response = client.post(
+            f"/api/cases/{case_id}/exports/packet",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+
+        self.assertEqual(letter_response.status_code, 201, letter_response.text)
+        letter = letter_response.json()
+        self.assertTrue(letter["file_name"].endswith("-appeal-letter.pdf"))
+        self.assertIn("# Appeal Letter: SYN-LMRI-APPEAL-EXPORT", letter["content_markdown"])
+        self.assertIn("Denial reason identified from payer letter", letter["content_markdown"])
+        self.assertEqual(letter["manifest_json"]["draft_letter_id"], draft["id"])
+        self.assertEqual(letter["manifest_json"]["draft_letter_type"], "appeal")
+
+        self.assertEqual(packet_response.status_code, 201, packet_response.text)
+        packet = packet_response.json()
+        self.assertTrue(packet["file_name"].endswith("-appeal-packet.pdf"))
+        self.assertIn("# Appeal Packet: SYN-LMRI-APPEAL-EXPORT", packet["content_markdown"])
+        self.assertEqual(packet["manifest_json"]["draft_letter_id"], draft["id"])
+        self.assertEqual(packet["manifest_json"]["draft_letter_type"], "appeal")
 
     def test_cross_org_cannot_download_export(self):
         client = self._client()

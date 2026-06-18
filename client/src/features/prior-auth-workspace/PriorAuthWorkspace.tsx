@@ -369,7 +369,8 @@ export function PriorAuthWorkspace() {
     () => cases.find((item) => item.id === selectedCaseId) ?? cases[0],
     [cases, selectedCaseId]
   );
-  const approvedDraftAvailable = drafts.some((draft) => draft.status === "approved");
+  const activeReport = report?.case_id === selectedCase?.id ? report : null;
+  const approvedDraftAvailable = drafts.some((draft) => draft.case_id === selectedCase?.id && draft.status === "approved");
   const appealDraftAvailable = selectedCase?.case_type === "appeal";
   const canManageCases = user?.role === "admin" || user?.role === "coordinator";
   const canGenerateDraft = canManageCases;
@@ -388,6 +389,19 @@ export function PriorAuthWorkspace() {
     setDrafts(nextArtifacts.drafts);
     setCitationCheck(null);
   }, []);
+
+  function resetCaseScopedState() {
+    setDocuments([]);
+    setCriteria([]);
+    setEvidence([]);
+    setDrafts([]);
+    setCriterionEdits({});
+    setEvidenceOverrides({});
+    setDraftEdits({});
+    setCitationCheck(null);
+    setExportArtifacts([]);
+    setReport(null);
+  }
 
   useEffect(() => {
     getCurrentUser()
@@ -471,6 +485,7 @@ export function PriorAuthWorkspace() {
     setUser(null);
     setCases([]);
     setSelectedCaseId(undefined);
+    resetCaseScopedState();
   }
 
   function handleCreateCase() {
@@ -483,6 +498,7 @@ export function PriorAuthWorkspace() {
         )
       });
       await refreshCases();
+      resetCaseScopedState();
       setSelectedCaseId(created.id);
     }, "Synthetic prior authorization case created.");
   }
@@ -497,6 +513,7 @@ export function PriorAuthWorkspace() {
         )
       });
       await refreshCases();
+      resetCaseScopedState();
       setSelectedCaseId(created.id);
     }, "Synthetic appeal case created.");
   }
@@ -805,7 +822,14 @@ export function PriorAuthWorkspace() {
                     }`}
                     key={caseItem.id}
                   >
-                    <button className="block w-full text-left" onClick={() => setSelectedCaseId(caseItem.id)} type="button">
+                    <button
+                      className="block w-full text-left"
+                      onClick={() => {
+                        resetCaseScopedState();
+                        setSelectedCaseId(caseItem.id);
+                      }}
+                      type="button"
+                    >
                       <span className="mb-2 flex items-center justify-between gap-2">
                         <span className="truncate text-sm font-semibold">{caseItem.patient_label}</span>
                         <StatusPill tone={statusTone(caseItem.status)}>{formatStatusLabel(caseItem.status)}</StatusPill>
@@ -1067,12 +1091,12 @@ export function PriorAuthWorkspace() {
                 <div className="grid gap-4 p-4 lg:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb] p-4">
                     <p className="text-sm text-[var(--muted)]">Readiness score</p>
-                    <p className="mt-2 text-4xl font-semibold">{report?.readiness_score ?? selectedCase?.readiness_score ?? "-"}</p>
+                    <p className="mt-2 text-4xl font-semibold">{activeReport?.readiness_score ?? selectedCase?.readiness_score ?? "-"}</p>
                   </div>
                   <div>
-                    <p className="text-sm leading-6">{report?.summary ?? "Generate a readiness report after matching evidence."}</p>
+                    <p className="text-sm leading-6">{activeReport?.summary ?? "Generate a readiness report after matching evidence."}</p>
                     <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-[var(--muted)]">
-                      {(report?.recommended_next_steps ?? []).map((step) => <li key={step}>{step}</li>)}
+                      {(activeReport?.recommended_next_steps ?? []).map((step) => <li key={step}>{step}</li>)}
                     </ul>
                   </div>
                 </div>

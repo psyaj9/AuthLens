@@ -1,16 +1,36 @@
 # Next PRD Implementation Phases
 
+## Case-Scoped Readiness And Appeal Export Fix
+
+- [x] Add failing backend coverage for exporting an approved appeal draft.
+- [x] Add failing browser coverage for clearing readiness details when switching to a blank case.
+- [x] Fix case-scoped readiness state reset in the workspace.
+- [x] Fix export draft lookup so appeal cases use approved appeal drafts.
+- [x] Run focused and broad verification.
+- [x] Update review notes and lessons.
+
+## Review
+
+- Root cause for stale readiness: the generated readiness report was held in component-level state and rendered without checking that `report.case_id` matched the selected case.
+- Fixed the workspace so selecting, creating, or logging out of cases clears case-scoped local artifacts, and the Readiness tab only renders a generated report for its own case.
+- Root cause for failed appeal export: the shared export helper looked only for approved `prior_auth` drafts, so approved `appeal` drafts were ignored.
+- Fixed letter and packet exports to choose the approved draft type from `case_type`, add `draft_letter_type` to the manifest, and label appeal PDFs as `appeal-letter.pdf` / `appeal-packet.pdf`.
+- Verification passed: focused red/green backend appeal export test, focused desktop/mobile Playwright readiness switch test, full `tests.test_exports`, full backend unittest discovery with 126 tests, client lint, typecheck, Vitest with 62 tests, Next production build, and Playwright e2e with 12 tests.
+
 ## Uploaded Document Deletion
 
 - [x] Add failing backend coverage for deleting an uploaded case document, including child rows and tenant/role boundaries.
 - [x] Add failing client/proxy coverage for deleting a document from the workspace.
 - [x] Implement the backend document delete service/route and local Next proxy/client helper.
 - [x] Add the document-row delete control and refresh behavior in the prior-auth workspace.
-- [ ] Run focused backend/client verification.
+- [x] Run focused backend/client verification.
 
 ## Review
 
-- Pending.
+- Added uploaded-document deletion through the current prior-auth document flow: FastAPI `DELETE /api/documents/{document_id}`, Next proxy route, client helper, and a workspace row action for admins/coordinators.
+- Document deletion removes extracted document pages/chunks, deletes case-scoped derived analysis artifacts so stale citations are not reused, removes stored prior-auth vector IDs from Pinecone when configured, deletes the uploaded file from the controlled upload directory, and writes a `document.deleted` audit event.
+- Added backend coverage for delete cleanup, viewer denial, cross-tenant direct-ID denial, and Pinecone namespace deletion; added client helper/proxy coverage and a desktop/mobile Playwright row-delete smoke.
+- Verification passed: focused red/green checks, full backend unittest discovery with 125 tests, client lint, typecheck, Vitest with 62 tests, Next production build, and Playwright e2e with 10 tests.
 
 ## Production UI Polish And PDF Export Pass
 

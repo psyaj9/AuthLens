@@ -144,13 +144,25 @@ def _latest_report(db: Session, case_id: str, organization_id: str) -> Readiness
     return report
 
 
-def _latest_approved_draft(db: Session, case_id: str, organization_id: str) -> DraftLetter:
+def _case_draft_type(case: PriorAuthCase) -> str:
+    return "appeal" if case.case_type == "appeal" else "prior_auth"
+
+
+def _case_export_label(case: PriorAuthCase) -> str:
+    return "Appeal" if _case_draft_type(case) == "appeal" else "Prior Authorization"
+
+
+def _case_export_slug(case: PriorAuthCase) -> str:
+    return "appeal" if _case_draft_type(case) == "appeal" else "prior-auth"
+
+
+def _latest_approved_draft(db: Session, case_id: str, organization_id: str, letter_type: str) -> DraftLetter:
     draft = db.scalar(
         select(DraftLetter)
         .where(
             DraftLetter.case_id == case_id,
             DraftLetter.organization_id == organization_id,
-            DraftLetter.letter_type == "prior_auth",
+            DraftLetter.letter_type == letter_type,
             DraftLetter.status == "approved",
         )
         .order_by(DraftLetter.approved_at.desc(), DraftLetter.updated_at.desc())
@@ -296,10 +308,13 @@ def create_readiness_export(db: Session, *, case_id: str, organization_id: str, 
 
 def create_letter_export(db: Session, *, case_id: str, organization_id: str, user_id: str) -> ExportArtifact:
     case = _case(db, case_id, organization_id)
-    draft = _latest_approved_draft(db, case.id, organization_id)
+    draft_type = _case_draft_type(case)
+    export_label = _case_export_label(case)
+    export_slug = _case_export_slug(case)
+    draft = _latest_approved_draft(db, case.id, organization_id, draft_type)
     content = "\n".join(
         [
-            f"# Prior Authorization Letter: {case.patient_label}",
+            f"# {export_label} Letter: {case.patient_label}",
             "",
             EXPORT_NOTICE,
             "",
@@ -311,6 +326,7 @@ def create_letter_export(db: Session, *, case_id: str, organization_id: str, use
         "export_type": "letter",
         "case_id": case.id,
         "draft_letter_id": draft.id,
+        "draft_letter_type": draft.letter_type,
         "generated_at": datetime.now(UTC).isoformat(),
     }
     return _store_export(
@@ -319,7 +335,7 @@ def create_letter_export(db: Session, *, case_id: str, organization_id: str, use
         organization_id=organization_id,
         user_id=user_id,
         export_type="letter",
-        file_name=f"{_slug(case.patient_label)}-prior-auth-letter.pdf",
+        file_name=f"{_slug(case.patient_label)}-{export_slug}-letter.pdf",
         content_markdown=content,
         manifest_json=manifest,
     )
@@ -328,14 +344,17 @@ def create_letter_export(db: Session, *, case_id: str, organization_id: str, use
 def create_packet_export(db: Session, *, case_id: str, organization_id: str, user_id: str) -> ExportArtifact:
     case = _case(db, case_id, organization_id)
     report = _latest_report(db, case.id, organization_id)
-    draft = _latest_approved_draft(db, case.id, organization_id)
+    draft_type = _case_draft_type(case)
+    export_label = _case_export_label(case)
+    export_slug = _case_export_slug(case)
+    draft = _latest_approved_draft(db, case.id, organization_id, draft_type)
     documents = _documents(db, case.id, organization_id)
     citations = _citation_backed_matches(db, case.id, organization_id)
     document_manifest = _document_manifest(documents)
     citation_manifest = _citation_manifest(citations)
     content = "\n".join(
         [
-            f"# Prior Authorization Packet: {case.patient_label}",
+            f"# {export_label} Packet: {case.patient_label}",
             "",
             EXPORT_NOTICE,
             "",
@@ -360,6 +379,7 @@ def create_packet_export(db: Session, *, case_id: str, organization_id: str, use
         "case_id": case.id,
         "readiness_report_id": report.id,
         "draft_letter_id": draft.id,
+        "draft_letter_type": draft.letter_type,
         "documents": document_manifest,
         "citations": citation_manifest,
         "generated_at": datetime.now(UTC).isoformat(),
@@ -370,7 +390,7 @@ def create_packet_export(db: Session, *, case_id: str, organization_id: str, use
         organization_id=organization_id,
         user_id=user_id,
         export_type="packet",
-        file_name=f"{_slug(case.patient_label)}-prior-auth-packet.pdf",
+        file_name=f"{_slug(case.patient_label)}-{export_slug}-packet.pdf",
         content_markdown=content,
         manifest_json=manifest,
     )
