@@ -352,6 +352,37 @@ class PriorAuthWorkflowTests(unittest.TestCase):
 
         self.assertEqual(token_count, 0)
 
+    def test_production_forgot_password_rejects_invalid_reset_delivery_mode(self):
+        client = self._client()
+        email = "reset-production-invalid-mode@example.test"
+        self._create_test_user(email=email, password="old-password", role="admin")
+
+        original_env = {
+            "ENVIRONMENT": os.environ.get("ENVIRONMENT"),
+            "PASSWORD_RESET_DELIVERY_MODE": os.environ.get("PASSWORD_RESET_DELIVERY_MODE"),
+        }
+        os.environ["ENVIRONMENT"] = "production"
+        os.environ["PASSWORD_RESET_DELIVERY_MODE"] = "debug"
+        try:
+            response = client.post("/api/auth/forgot-password", json={"email": email})
+        finally:
+            for key, value in original_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"error": "Password reset delivery is not configured"})
+
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            token_count = db.scalar(sqlalchemy.select(sqlalchemy.func.count()).select_from(models.PasswordResetToken))
+
+        self.assertEqual(token_count, 0)
+
     def test_production_forgot_password_with_delivery_config_does_not_expose_reset_token(self):
         client = self._client()
         email = "reset-production-configured@example.test"

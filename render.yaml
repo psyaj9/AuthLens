@@ -29,6 +29,8 @@ services:
         sync: false
       - key: INTERNAL_API_TOKEN
         sync: false
+      - key: PASSWORD_RESET_DELIVERY_MODE
+        sync: false
       - key: MAX_UPLOAD_MB
         value: "10"
       - key: MAX_UPLOAD_FILES

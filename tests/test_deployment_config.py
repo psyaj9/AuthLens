@@ -29,6 +29,17 @@ class DeploymentConfigTests(unittest.TestCase):
 
         self.assertIn(expected_start, readme)
 
+    def test_password_reset_delivery_mode_is_documented_for_production(self):
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        env_example = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
+        render_yaml = (PROJECT_ROOT / "render.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("PASSWORD_RESET_DELIVERY_MODE", readme)
+        self.assertIn("PASSWORD_RESET_DELIVERY_MODE=", env_example)
+        self.assertIn("PASSWORD_RESET_DELIVERY_MODE", render_yaml)
+        self.assertIn("email", readme)
+        self.assertIn("external", readme)
+
 
 if __name__ == "__main__":
     unittest.main()

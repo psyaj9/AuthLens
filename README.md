@@ -237,6 +237,7 @@ Backend variables:
 | `DATABASE_URL` | Production | Defaults to local SQLite at `server/authlens.db`; use Postgres for deployment. |
 | `JWT_SECRET` | Production | Required when `ENVIRONMENT=production`; local/test runs use a non-production fallback if unset. |
 | `INTERNAL_API_TOKEN` | Production | Shared service token for client-to-backend calls when the backend enforces internal auth. |
+| `PASSWORD_RESET_DELIVERY_MODE` | Production for forgot-password | Set to `email` or `external` before enabling forgot-password in production. If unset, production reset requests fail closed with 503 and no reset token is created. Non-production keeps returning a reset token for local testing. |
 | `MAX_UPLOAD_MB` | No | Upload size limit in megabytes. |
 | `MAX_UPLOAD_FILES` | No | Maximum uploaded files per request. |
 | `ENVIRONMENT` | No | Use `local`, `preview`, `test`, or `production`. |
@@ -265,6 +266,8 @@ Do not use `NEXT_PUBLIC_BACKEND_API_URL` for the backend service URL. Keep the b
 - Health check path: `/api/health/`
 
 Use a managed Postgres `DATABASE_URL` for deployed environments. Keep SQLite for local and test use only. Render environment variables marked `sync: false` must be entered in the Render dashboard.
+
+Set `PASSWORD_RESET_DELIVERY_MODE=email` when a real email provider sends reset links, or `PASSWORD_RESET_DELIVERY_MODE=external` when an external operational process handles reset delivery. Leave it unset in production only if forgot-password should fail closed.
 
 ### Client On Vercel
 
