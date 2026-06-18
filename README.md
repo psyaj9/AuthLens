@@ -43,8 +43,8 @@ Implemented:
 
 Next implementation phases:
 
-- Expand synthetic evals beyond smoke checks into expected criteria, evidence-status, missing-item, and prompt-injection outcome scoring.
-- Complete dependency audits, security scans, CI, and production deployment gates.
+- Grow the synthetic eval dataset beyond the 3-case smoke set while preserving criteria, evidence-status, missing-item, and prompt-injection scoring.
+- Complete Codex Security scans and production deployment smoke gates; dependency-audit CI gates are now in place.
 - Defer OCR, async workers, object storage, admin analytics, EHR/FHIR, payer submission, and real PHI readiness until after the MVP is stable.
 
 ## Runtime Architecture
@@ -312,6 +312,8 @@ npm run test:e2e
 Security and dependency checks:
 
 ```powershell
+uv pip install --python .\.venv\Scripts\python.exe pip-audit
+.\.venv\Scripts\python.exe -m pip_audit -r server\requirements.txt --strict --cache-dir .authlens_tmp\pip-audit-cache
 Set-Location client
 npm audit --audit-level=high
 ```
@@ -329,8 +331,8 @@ curl.exe https://<vercel-client-host>/
 
 CircleCI runs independent backend and client jobs:
 
-- `backend-test` installs `server/requirements.txt`, runs `python -m unittest discover tests`, runs `python server/evals/run_synthetic_eval.py`, and validates Alembic migrations.
-- `client-test-build` runs `npm ci`, `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` from `client/`.
+- `backend-test` installs `server/requirements.txt`, runs `python -m pip_audit -r server/requirements.txt --strict`, runs `python -m unittest discover tests`, runs `python server/evals/run_synthetic_eval.py`, and validates Alembic migrations.
+- `client-test-build` runs `npm ci`, `npm audit --audit-level=high`, `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` from `client/`.
 
 Dependency caches are optimizations only. A cache miss should still produce a clean install and test run.
 
@@ -367,6 +369,6 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
 4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
 5. Phase 4 - In progress: structured Groq provider boundary, opt-in criteria/evidence/readiness branches, and expanded smoke-eval scoring are implemented; larger PRD eval dataset growth remains.
-6. Phase 5 - In progress: password-reset session invalidation and the production reset-delivery gate are implemented; security scans, CI, and deployment gates remain.
+6. Phase 5 - In progress: password-reset session invalidation, production reset-delivery gating, synthetic eval CI, and dependency-audit CI are implemented; Codex Security scans and deployment smoke gates remain.
 
 Deferred capabilities include OCR fallback, async processing workers, object storage, admin analytics, EHR/FHIR integration, payer submission, and real PHI production readiness.

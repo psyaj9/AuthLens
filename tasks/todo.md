@@ -67,6 +67,13 @@
   - [x] Update README CI docs to include the explicit eval command.
   - [x] Verify the focused deployment-config test and direct eval command.
 - Phase 5 CI eval-gate verification passed: `tests.test_deployment_config.DeploymentConfigTests.test_circleci_runs_synthetic_eval_gate` passed, `.venv\Scripts\python.exe server\evals\run_synthetic_eval.py` passed 3/3 synthetic cases with no failed cases, and backend unittest discovery passed 105 tests.
+- Current Phase 5 dependency-audit CI slice:
+  - [x] Add backend CI gates for installing `pip-audit` and auditing `server/requirements.txt`.
+  - [x] Add client CI gate for `npm audit --audit-level=high`.
+  - [x] Add deployment-config regressions for both dependency-audit gates.
+  - [x] Update README security/CI docs with local and CI audit commands.
+  - [x] Verify Python and client dependency audits locally.
+- Phase 5 dependency-audit verification passed: deployment-config tests passed 8 tests, Python `pip_audit` found no known backend vulnerabilities, `npm audit --audit-level=high` exited cleanly with only moderate Next/PostCSS advisories, and backend unittest discovery passed 107 tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

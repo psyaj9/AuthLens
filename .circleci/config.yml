@@ -24,6 +24,14 @@ jobs:
             - ~/.cache/pip
 
       - run:
+          name: Install Python audit tooling
+          command: python -m pip install pip-audit
+
+      - run:
+          name: Audit backend dependencies
+          command: python -m pip_audit -r server/requirements.txt --strict
+
+      - run:
           name: Run backend unit tests
           command: python -m unittest discover tests
 
@@ -63,6 +71,11 @@ jobs:
           key: v1-npm-{{ checksum "client/package-lock.json" }}
           paths:
             - ~/.npm
+
+      - run:
+          name: Audit client dependencies
+          working_directory: ~/project/client
+          command: npm audit --audit-level=high
 
       - run:
           name: Lint client
