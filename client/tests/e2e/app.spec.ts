@@ -126,6 +126,38 @@ async function mockAuthenticatedReviewerWorkspace(page: Page) {
       })
     });
   });
+  await page.route("**/api/drafts/draft_1/approve", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "draft_1",
+        case_id: "case_1",
+        letter_type: "prior_auth",
+        status: "approved",
+        content_markdown: "Clinician review is required before submission.\n[note.pdf, page 2]",
+        created_by: "ai",
+        approved_at: "2026-06-18T00:00:00Z",
+        created_at: "2026-06-18T00:00:00Z",
+        updated_at: "2026-06-18T00:00:00Z"
+      })
+    });
+  });
+  await page.route("**/api/cases/case_1/exports/packet", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "export_1",
+        case_id: "case_1",
+        export_type: "packet",
+        status: "ready",
+        file_name: "syn-lmri-review-prior-auth-packet.md",
+        mime_type: "text/markdown",
+        content_markdown: "# Packet",
+        manifest_json: { synthetic_only: true },
+        created_at: "2026-06-18T00:00:00Z"
+      })
+    });
+  });
 }
 
 test.describe("PriorAuth Evidence Copilot", () => {
@@ -176,9 +208,19 @@ test.describe("PriorAuth Evidence Copilot", () => {
     await expect(page.getByRole("button", { name: "Save draft edits" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Verify citations" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve draft" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Export readiness" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Export letter" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Export packet" })).toBeDisabled();
 
     await page.getByRole("button", { name: "Verify citations" }).click();
     await expect(page.getByText("Unsupported claims")).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve draft" })).toBeEnabled();
+
+    await page.getByRole("button", { name: "Approve draft" }).click();
+    await expect(page.getByRole("button", { name: "Export letter" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Export packet" })).toBeEnabled();
+
+    await page.getByRole("button", { name: "Export packet" }).click();
+    await expect(page.getByRole("link", { name: /syn-lmri-review-prior-auth-packet\.md/i })).toBeVisible();
   });
 });

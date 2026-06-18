@@ -639,6 +639,127 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(draft_response.status_code, 200, draft_response.text)
         self.assertNotIn("provided documents indicate supporting evidence", draft_response.json()["content_markdown"].lower())
 
+    def test_appeal_draft_uses_denial_letter_reason_and_verified_evidence(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_response = client.post(
+            "/api/cases",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+            json={
+                "patient_label": "SYN-LMRI-APPEAL",
+                "payer_name": "Example Health Plan",
+                "specialty": "Radiology",
+                "requested_service": "Lumbar spine MRI",
+                "case_type": "appeal",
+            },
+        )
+        self.assertEqual(case_response.status_code, 201, case_response.text)
+        case_id = case_response.json()["id"]
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy. Functional limitation must be documented.",
+        )
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "patient_note",
+            "note.pdf",
+            b"%PDF-1.4\nThe provided documents indicate six weeks of conservative therapy and functional limitation with walking.",
+        )
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "denial_letter",
+            "denial.pdf",
+            b"%PDF-1.4\nThe request was denied as not medically necessary due to insufficient conservative therapy documentation.",
+        )
+        for path in [
+            f"/api/cases/{case_id}/criteria/extract",
+            f"/api/cases/{case_id}/evidence/match",
+            f"/api/cases/{case_id}/reports/readiness",
+        ]:
+            response = client.post(path, headers={"Authorization": f"Bearer {coordinator_token}"})
+            self.assertEqual(response.status_code, 200, response.text)
+
+        draft_response = client.post(
+            f"/api/cases/{case_id}/drafts/appeal",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+
+        self.assertEqual(draft_response.status_code, 200, draft_response.text)
+        draft = draft_response.json()
+        content = draft["content_markdown"]
+        lowered = content.lower()
+        self.assertEqual(draft["letter_type"], "appeal")
+        self.assertIn("not medically necessary", lowered)
+        self.assertIn("insufficient conservative therapy documentation", lowered)
+        self.assertIn("Clinician review is required", content)
+        self.assertIn("[note.pdf, page 1]", content)
+        self.assertNotIn("guaranteed approval", lowered)
+        self.assertNotIn("must approve", lowered)
+        self.assertNotIn("this patient qualifies", lowered)
+
+        check_response = client.post(
+            f"/api/drafts/{draft['id']}/verify-citations",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(check_response.status_code, 200, check_response.text)
+        self.assertEqual(check_response.json()["verification_status"], "pass")
+
+    def test_appeal_draft_requires_denial_letter(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_response = client.post(
+            "/api/cases",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+            json={
+                "patient_label": "SYN-LMRI-APPEAL-MISSING",
+                "payer_name": "Example Health Plan",
+                "specialty": "Radiology",
+                "requested_service": "Lumbar spine MRI",
+                "case_type": "appeal",
+            },
+        )
+        self.assertEqual(case_response.status_code, 201, case_response.text)
+        case_id = case_response.json()["id"]
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "patient_note",
+            "note.pdf",
+            b"%PDF-1.4\nThe provided documents indicate six weeks of conservative therapy.",
+        )
+        for path in [
+            f"/api/cases/{case_id}/criteria/extract",
+            f"/api/cases/{case_id}/evidence/match",
+            f"/api/cases/{case_id}/reports/readiness",
+        ]:
+            response = client.post(path, headers={"Authorization": f"Bearer {coordinator_token}"})
+            self.assertEqual(response.status_code, 200, response.text)
+
+        draft_response = client.post(
+            f"/api/cases/{case_id}/drafts/appeal",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+
+        self.assertEqual(draft_response.status_code, 400)
+        self.assertEqual(draft_response.json(), {"error": "Upload a denial letter before drafting an appeal"})
+
     def test_clinician_can_audit_update_criteria_without_losing_source_provenance(self):
         client = self._client()
         coordinator_token = self._login(client)

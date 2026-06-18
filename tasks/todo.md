@@ -2,7 +2,7 @@
 
 - [x] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
 - [x] Execute Phase 1: reviewer workspace completion.
-- [ ] Execute Phase 2: export artifacts, download APIs, and packet manifest.
+- [x] Execute Phase 2: export artifacts, download APIs, and packet manifest.
 - [ ] Execute Phase 3: appeal workflow with denial-letter extraction.
 - [ ] Execute Phase 4: structured LLM gateway and expanded eval runner.
 - [ ] Execute Phase 5: production-readiness hardening, security scan, and deployment gates.
@@ -17,6 +17,8 @@
 - Updated `README.md` around the current prior-auth workspace, including architecture diagrams, multi-agent implementation workflow, test commands, deployment notes, and remaining phases.
 - Phase 1 reviewer workspace is now implemented: client helpers and local proxy coverage for criteria updates, evidence overrides, draft edits, citation verification, and approval; inline reviewer controls in the criteria/evidence/draft tabs; citation issue details; approval disabled until citation verification passes.
 - Phase 1 verification passed: `npm run lint`, `npm run typecheck`, `npm run test` with 40 Vitest tests across 9 files, `npm run build`, and `npm run test:e2e` with 6 desktop/mobile Playwright tests.
+- Phase 2 exports are now implemented: persisted `ExportArtifact` records, Alembic migration `20260618_0003`, readiness/letter/packet export APIs, markdown download API, packet document/citation manifest, export creation/download audit events, and client export controls/download links.
+- Phase 2 verification passed: backend unittest discovery with 63 tests, `tests.test_exports` with 5 focused export tests, Alembic upgrade smoke through `20260618_0003`, client lint/typecheck/test/build, and Playwright desktop/mobile e2e with 6 tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

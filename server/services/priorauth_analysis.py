@@ -101,6 +101,14 @@ def _short_quote(text: str, limit: int = 220) -> str:
     return normalized[:limit]
 
 
+def _denial_reason_from_chunks(chunks: list[DocumentChunk]) -> str:
+    for chunk in chunks:
+        for sentence in _sentences(chunk.text):
+            if re.search(r"\b(denied|denial|not medically necessary|lack|missing|insufficient)\b", sentence, re.I):
+                return _short_quote(sentence, 240)
+    return "The denial reason was not clearly extracted from the uploaded denial letter."
+
+
 def _effective_match_status(match: EvidenceMatch) -> str:
     return match.reviewer_override_status or match.status
 
@@ -531,6 +539,77 @@ def create_prior_auth_draft(db: Session, *, case_id: str, organization_id: str, 
         entity_type="draft_letter",
         entity_id=draft.id,
         metadata={"letter_type": "prior_auth"},
+    )
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+def create_appeal_draft(db: Session, *, case_id: str, organization_id: str, user_id: str) -> DraftLetter:
+    case = _case(db, case_id, organization_id)
+    report = latest_report(db, case_id=case.id, organization_id=organization_id)
+    denial_chunks = _chunks(
+        db,
+        case_id=case.id,
+        organization_id=organization_id,
+        document_types={"denial_letter"},
+    )
+    if not denial_chunks:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a denial letter before drafting an appeal")
+    denial_reason = _denial_reason_from_chunks(denial_chunks)
+    matches = [
+        match
+        for match in list_matches(db, case_id=case.id, organization_id=organization_id)
+        if _is_citation_backed_met(match)
+    ]
+    lines = [
+        f"Subject: Appeal documentation packet for {case.requested_service}",
+        "",
+        f"This draft is prepared for clinician review for synthetic appeal case {case.patient_label}.",
+        "",
+        f"Denial reason identified from payer letter: {denial_reason}",
+        "",
+        "Evidence for reviewer consideration:",
+    ]
+    if matches:
+        for match in matches:
+            lines.append(
+                f"- The provided documents indicate supporting evidence: {match.evidence_summary} "
+                f"[{match.source_file}, page {match.source_page}]"
+            )
+    else:
+        lines.append("- No citation-backed supporting evidence was found in the patient documents.")
+    if report.highest_risk_items:
+        lines.append("")
+        lines.append("Missing or unclear documentation to review before submission:")
+        for item in report.highest_risk_items:
+            lines.append(f"- {item}")
+    lines.extend(
+        [
+            "",
+            "Clinician review is required before submission. This draft does not diagnose, recommend treatment, or guarantee payer approval.",
+        ]
+    )
+    draft = DraftLetter(
+        organization_id=organization_id,
+        case_id=case.id,
+        letter_type="appeal",
+        status="draft",
+        content_markdown="\n".join(lines),
+        model_version="deterministic-mvp",
+        source_report_id=report.id,
+        created_by="ai",
+    )
+    db.add(draft)
+    log_audit_event(
+        db,
+        organization_id=organization_id,
+        case_id=case.id,
+        user_id=user_id,
+        action="draft.generated",
+        entity_type="draft_letter",
+        entity_id=draft.id,
+        metadata={"letter_type": "appeal"},
     )
     db.commit()
     db.refresh(draft)

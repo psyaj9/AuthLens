@@ -40,7 +40,6 @@ Implemented:
 
 Next implementation phases:
 
-- Add export artifacts for readiness reports, prior-auth letters, and packet manifests.
 - Implement the appeal path from denial-letter upload through appeal draft generation.
 - Add a structured LLM gateway with schema validation and fail-closed analysis runs.
 - Expand synthetic evals, red-team fixtures, dependency audits, and production security gates.
@@ -137,6 +136,10 @@ Prior-auth workflow:
 - `GET/PATCH /api/drafts/{draft_id}`
 - `POST /api/drafts/{draft_id}/verify-citations`
 - `POST /api/drafts/{draft_id}/approve`
+- `POST /api/cases/{case_id}/exports/readiness-report`
+- `POST /api/cases/{case_id}/exports/letter`
+- `POST /api/cases/{case_id}/exports/packet`
+- `GET /api/exports/{export_id}/download`
 - `GET /api/cases/{case_id}/audit`
 - `GET /api/audit`
 
@@ -290,8 +293,8 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 
 1. Phase 0 - Implemented: executable eval and tenant-isolation guardrails.
 2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
-3. Phase 2 - Next: add readiness, letter, and packet exports.
-4. Phase 3 - Implement denial-letter appeal workflow.
+3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
+4. Phase 3 - Next: implement denial-letter appeal workflow.
 5. Phase 4 - Add structured LLM gateway and expanded eval runner.
 6. Phase 5 - Harden auth/session behavior, security scans, CI, and deployment gates.
 

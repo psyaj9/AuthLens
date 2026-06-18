@@ -298,6 +298,31 @@ class ExportWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(cross_org_response.status_code, 404)
 
+    def test_export_creation_requires_allowed_role_and_same_org_case(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        viewer_token = self._login(client, email="viewer@test.authlens.local", role="viewer")
+        self._create_test_user(
+            email="other-admin@test.authlens.local",
+            role="admin",
+            organization_id="org_other_spine",
+            organization_name="Other Spine Clinic",
+        )
+        other_org_token = self._login(client, email="other-admin@test.authlens.local", role="admin")
+        case_id = self._prepare_analyzed_case(client, coordinator_token)
+
+        viewer_response = client.post(
+            f"/api/cases/{case_id}/exports/readiness-report",
+            headers={"Authorization": f"Bearer {viewer_token}"},
+        )
+        self.assertEqual(viewer_response.status_code, 403)
+
+        cross_org_response = client.post(
+            f"/api/cases/{case_id}/exports/readiness-report",
+            headers={"Authorization": f"Bearer {other_org_token}"},
+        )
+        self.assertEqual(cross_org_response.status_code, 404)
+
     def test_exports_have_migration_audit_events_and_no_local_paths(self):
         client = self._client()
         coordinator_token = self._login(client)

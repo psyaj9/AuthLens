@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from db.session import get_db
@@ -12,13 +12,13 @@ from modules.schemas import (
 )
 from services.priorauth_analysis import (
     approve_draft,
+    create_appeal_draft,
     create_prior_auth_draft,
     get_draft,
     list_drafts,
     update_draft,
     verify_citations,
 )
-from routes.cases import get_case_for_user
 
 
 router = APIRouter()
@@ -66,14 +66,19 @@ async def create_prior_auth_letter(
     return draft_response(draft)
 
 
-@router.post("/cases/{case_id}/drafts/appeal")
-async def appeal_draft_deferred(
+@router.post("/cases/{case_id}/drafts/appeal", response_model=DraftLetterResponse)
+async def create_appeal_letter(
     case_id: str,
     current_user: CurrentUser = Depends(require_roles("admin", "coordinator")),
     db: Session = Depends(get_db),
 ):
-    get_case_for_user(db, case_id, current_user)
-    raise HTTPException(status_code=501, detail="Appeal drafting is deferred from the first MVP")
+    draft = create_appeal_draft(
+        db,
+        case_id=case_id,
+        organization_id=current_user.organization_id,
+        user_id=current_user.user_id,
+    )
+    return draft_response(draft)
 
 
 @router.get("/cases/{case_id}/drafts", response_model=DraftListResponse)

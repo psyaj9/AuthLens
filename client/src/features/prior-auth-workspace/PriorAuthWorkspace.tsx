@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } fro
 import {
   CheckCircle2,
   ClipboardCheck,
+  Download,
   FileSearch,
   FileText,
   LogOut,
@@ -19,7 +20,10 @@ import { StatusPill } from "@/components/ui/status-pill";
 import {
   approveDraft,
   createCase,
+  createLetterExport,
+  createPacketExport,
   createPriorAuthDraft,
+  createReadinessExport,
   extractCriteria,
   forgotPassword,
   generateReadinessReport,
@@ -47,6 +51,7 @@ import type {
   Criterion,
   DraftLetter,
   EvidenceMatch,
+  ExportArtifact,
   ReadinessReport,
   UserProfile
 } from "@/lib/api/priorauth-schemas";
@@ -322,6 +327,7 @@ export function PriorAuthWorkspace() {
   const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
   const [evidence, setEvidence] = useState<EvidenceMatch[]>([]);
   const [evidenceOverrides, setEvidenceOverrides] = useState<Record<string, EvidenceOverrideEdit>>({});
+  const [exportArtifacts, setExportArtifacts] = useState<ExportArtifact[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState("payer_policy");
   const [message, setMessage] = useState<string>();
@@ -334,6 +340,7 @@ export function PriorAuthWorkspace() {
     () => cases.find((item) => item.id === selectedCaseId) ?? cases[0],
     [cases, selectedCaseId]
   );
+  const approvedDraftAvailable = drafts.some((draft) => draft.status === "approved");
 
   const refreshCases = useCallback(async () => {
     const nextCases = await listCases();
@@ -376,6 +383,7 @@ export function PriorAuthWorkspace() {
         setEvidence(nextArtifacts.evidence);
         setDrafts(nextArtifacts.drafts);
         setCitationCheck(null);
+        setExportArtifacts([]);
       });
 
       return () => {
@@ -585,6 +593,22 @@ export function PriorAuthWorkspace() {
       setDrafts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       await refreshCases();
     }, "Draft approved.");
+  }
+
+  function handleCreateExport(kind: "readiness" | "letter" | "packet") {
+    if (!selectedCase) return;
+    void runAction(async () => {
+      const artifact =
+        kind === "readiness"
+          ? await createReadinessExport(selectedCase.id)
+          : kind === "letter"
+            ? await createLetterExport(selectedCase.id)
+            : await createPacketExport(selectedCase.id);
+      setExportArtifacts((current) => [artifact, ...current.filter((item) => item.id !== artifact.id)]);
+      if (kind === "packet") {
+        await refreshCases();
+      }
+    }, "Export artifact created.");
   }
 
   if (!user) {
@@ -911,6 +935,42 @@ export function PriorAuthWorkspace() {
               <Panel labelledBy="draft-heading">
                 <PanelHeader action={<Button disabled={!selectedCase} onClick={handleDraft}><FileText aria-hidden className="h-4 w-4" />Draft</Button>} id="draft-heading" title="Prior Authorization Draft" />
                 <div className="flex flex-col gap-4 p-4">
+                  <div className="rounded-md border border-[var(--border)] bg-white p-4">
+                    <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold">Exports</h3>
+                        <p className="mt-1 text-sm text-[var(--muted)]">Markdown artifacts are generated after review gates pass.</p>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button disabled={!selectedCase || selectedCase.readiness_score == null} onClick={() => handleCreateExport("readiness")} variant="secondary">
+                          <Download aria-hidden className="h-4 w-4" />
+                          Export readiness
+                        </Button>
+                        <Button disabled={!approvedDraftAvailable} onClick={() => handleCreateExport("letter")} variant="secondary">
+                          <Download aria-hidden className="h-4 w-4" />
+                          Export letter
+                        </Button>
+                        <Button disabled={!approvedDraftAvailable} onClick={() => handleCreateExport("packet")}>
+                          <Download aria-hidden className="h-4 w-4" />
+                          Export packet
+                        </Button>
+                      </div>
+                    </div>
+                    {exportArtifacts.length > 0 ? (
+                      <div className="grid gap-2">
+                        {exportArtifacts.map((artifact) => (
+                          <a
+                            className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[#fbfcfb] px-3 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-[#eef9f7]"
+                            href={`/api/exports/${artifact.id}/download`}
+                            key={artifact.id}
+                          >
+                            <span>{artifact.file_name}</span>
+                            <Download aria-hidden className="h-4 w-4" />
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                   {drafts.map((draft) => {
                     const activeCitationCheck = citationCheck?.draft_letter_id === draft.id ? citationCheck : null;
                     const approvalReady = activeCitationCheck?.verification_status === "pass";
