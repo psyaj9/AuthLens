@@ -274,6 +274,30 @@ class LlmGatewayTests(unittest.TestCase):
                 }
             )
 
+    def test_criteria_schema_rejects_blank_source_quote(self):
+        schemas = importlib.import_module("services.analysis_schemas")
+
+        with self.assertRaises(Exception):
+            schemas.CriteriaExtractionOutput.model_validate(
+                {
+                    "criteria": [
+                        {
+                            "criterion_code": "C1",
+                            "criterion_type": "documentation",
+                            "requirement": "Document six weeks of conservative therapy.",
+                            "required_evidence": ["Therapy dates"],
+                            "is_required": True,
+                            "source_quote": "   ",
+                            "source_file": "policy.pdf",
+                            "source_page": "1",
+                            "confidence": 0.82,
+                            "ambiguity_notes": [],
+                        }
+                    ],
+                    "missing_or_ambiguous_policy_info": [],
+                }
+            )
+
     def test_evidence_schema_rejects_met_without_source_citation_fields(self):
         schemas = importlib.import_module("services.analysis_schemas")
 

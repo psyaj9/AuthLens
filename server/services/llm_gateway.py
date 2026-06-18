@@ -15,6 +15,10 @@ class StructuredOutputError(ValueError):
     pass
 
 
+class StructuredOutputValidationError(StructuredOutputError):
+    pass
+
+
 def generate_structured_output(prompt: str) -> str:
     raise StructuredOutputError("Structured LLM provider is not configured")
 
@@ -27,7 +31,7 @@ def parse_structured_output(model: type[ModelT], raw_text: str) -> ModelT:
     try:
         return model.model_validate_json(raw_text)
     except ValidationError as exc:
-        raise StructuredOutputError(STRUCTURED_OUTPUT_ERROR) from exc
+        raise StructuredOutputValidationError(STRUCTURED_OUTPUT_ERROR) from exc
 
 
 def parse_structured_output_with_run(
@@ -42,7 +46,7 @@ def parse_structured_output_with_run(
 ) -> ModelT:
     try:
         parsed = parse_structured_output(model, raw_text)
-    except StructuredOutputError as exc:
+    except StructuredOutputValidationError as exc:
         run = AnalysisRun(
             organization_id=organization_id,
             case_id=case_id,

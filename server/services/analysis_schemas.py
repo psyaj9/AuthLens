@@ -1,6 +1,13 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+def _strip_non_blank(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("value must not be blank")
+    return normalized
 
 
 class StructuredCriterion(BaseModel):
@@ -14,6 +21,11 @@ class StructuredCriterion(BaseModel):
     source_page: str = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
     ambiguity_notes: list[str] = Field(default_factory=list)
+
+    @field_validator("criterion_code", "criterion_type", "requirement", "source_quote", "source_file", "source_page")
+    @classmethod
+    def required_text_must_not_be_blank(cls, value: str) -> str:
+        return _strip_non_blank(value)
 
 
 class CriteriaExtractionOutput(BaseModel):

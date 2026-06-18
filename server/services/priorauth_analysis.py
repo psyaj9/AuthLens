@@ -167,7 +167,10 @@ def _chunk_supports_source(chunk: DocumentChunk, *, source_page: str, source_quo
         return False
     if not (chunk.page_start <= cited_page <= chunk.page_end):
         return False
-    return source_quote.strip().lower() in chunk.text.lower()
+    quote = source_quote.strip()
+    if not quote:
+        return False
+    return quote.lower() in chunk.text.lower()
 
 
 def _grounded_policy_chunk_for_criterion(
@@ -248,16 +251,17 @@ def _extract_criteria_with_llm(
             run_type="criteria_extraction",
             model_version=model_version,
         )
+    except llm_gateway.StructuredOutputValidationError:
+        _raise_structured_output_failure()
     except llm_gateway.StructuredOutputError as exc:
-        if exc.__cause__ is None:
-            _record_llm_generation_failure(
-                db,
-                organization_id=organization_id,
-                case_id=case.id,
-                run_type="criteria_extraction",
-                model_version=model_version,
-                error_type=type(exc).__name__,
-            )
+        _record_llm_generation_failure(
+            db,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="criteria_extraction",
+            model_version=model_version,
+            error_type=type(exc).__name__,
+        )
         _raise_structured_output_failure()
     if not output.criteria:
         _record_llm_generation_failure(
