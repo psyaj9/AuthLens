@@ -38,13 +38,13 @@ Implemented:
 - Next.js workspace with account flows, case list, prior-auth and appeal case creation, case detail workflow, typed upload, criteria/evidence/readiness/draft views, export controls, and backend proxy routes.
 - Synthetic golden-case fixture runner and cross-tenant direct-ID regression tests.
 - Readiness, letter, and packet markdown exports with persisted manifests and download routes.
-- Structured LLM gateway foundation with Pydantic output schemas, opt-in criteria extraction, redacted failed `AnalysisRun` recording, and untrusted-document prompt framing.
+- Structured LLM gateway foundation with Pydantic output schemas, opt-in criteria extraction, evidence matching, readiness reporting, redacted failed `AnalysisRun` recording, and untrusted-document prompt framing.
 - Legacy `/api/upload_pdf/` and `/api/queries/` routes for the original PDF Q&A flow.
 
 Next implementation phases:
 
-- Expand the structured LLM branch beyond criteria extraction into evidence matching and readiness reports.
-- Expand synthetic evals, red-team fixtures, dependency audits, security scans, CI, and production deployment gates.
+- Expand synthetic evals beyond smoke checks into expected criteria, evidence-status, missing-item, and prompt-injection outcome scoring.
+- Complete dependency audits, security scans, CI, and production deployment gates.
 - Defer OCR, async workers, object storage, admin analytics, EHR/FHIR, payer submission, and real PHI readiness until after the MVP is stable.
 
 ## Runtime Architecture
@@ -92,13 +92,14 @@ Current scope:
 
 - `server/services/llm_gateway.py` calls Groq through a lazy JSON-schema request boundary, extracts raw JSON content, validates it with Pydantic, and records failed analysis runs for invalid output.
 - `server/services/analysis_schemas.py` defines structured criteria, evidence, and readiness contracts.
-- Criteria extraction has an opt-in LLM branch behind `PRIORAUTH_ANALYSIS_MODE=llm`; deterministic extraction stays active by default and does not require a live LLM call.
+- Criteria extraction, evidence matching, and readiness report generation have opt-in LLM branches behind `PRIORAUTH_ANALYSIS_MODE=llm`; deterministic analysis stays active by default and does not require a live LLM call.
+- LLM evidence matching cites patient documents only. The service grounds each cited file, page, and quote to organization-scoped patient-document chunks before replacing stored matches.
+- LLM readiness keeps deterministic documentation-completeness scoring as the source of truth; the model can structure the summary, highest-risk items, and reviewer next steps.
 - Failed structured output stores schema/error-type metadata only. Raw PDF text, raw model output, and provider exception text are not stored in failure metadata.
 - `PRIORAUTH_LLM_MODEL` selects the structured-analysis Groq model when set; otherwise the gateway falls back to `GROQ_MODEL`, then `llama-3.1-8b-instant`.
 
 Remaining Phase 4 work:
 
-- Extend the opt-in branch to evidence matching and readiness reports.
 - Expand the eval runner from smoke checks into expected criteria, evidence statuses, missing-item, and prompt-injection outcome checks.
 
 ## Prior-Auth Workflow
@@ -358,7 +359,7 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
 3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
 4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
-5. Phase 4 - In progress: structured Groq provider boundary and opt-in criteria branch are implemented; evidence/readiness LLM branches and expanded eval scoring remain.
+5. Phase 4 - In progress: structured Groq provider boundary and opt-in criteria/evidence/readiness branches are implemented; expanded eval scoring remains.
 6. Phase 5 - Harden auth/session behavior, security scans, CI, and deployment gates.
 
 Deferred capabilities include OCR fallback, async processing workers, object storage, admin analytics, EHR/FHIR integration, payer submission, and real PHI production readiness.

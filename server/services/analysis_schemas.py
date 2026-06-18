@@ -32,6 +32,16 @@ class CriteriaExtractionOutput(BaseModel):
     criteria: list[StructuredCriterion] = Field(default_factory=list)
     missing_or_ambiguous_policy_info: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def criterion_codes_must_be_unique(self):
+        seen_codes: set[str] = set()
+        for criterion in self.criteria:
+            normalized_code = criterion.criterion_code.casefold()
+            if normalized_code in seen_codes:
+                raise ValueError("criterion_code values must be unique")
+            seen_codes.add(normalized_code)
+        return self
+
 
 class StructuredEvidenceMatch(BaseModel):
     criterion_code: str = Field(min_length=1, max_length=32)

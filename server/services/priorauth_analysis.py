@@ -20,7 +20,7 @@ from models.priorauth import (
 )
 from services.audit import log_audit_event
 from services import llm_gateway
-from services.analysis_schemas import CriteriaExtractionOutput
+from services.analysis_schemas import CriteriaExtractionOutput, EvidenceMatchingOutput, ReadinessOutput
 
 
 PATIENT_DOCUMENT_TYPES = {
@@ -47,6 +47,20 @@ STOPWORDS = {
     "with",
 }
 BANNED_DRAFT_TERMS = {"guaranteed approval", "must approve", "approved for coverage", "this patient qualifies"}
+UNSAFE_READINESS_TERMS = BANNED_DRAFT_TERMS | {
+    "approval is likely",
+    "approval likely",
+    "likely approval",
+    "likely to be approved",
+    "will be approved",
+    "should be approved",
+    "start physical therapy",
+    "begin physical therapy",
+    "initiate physical therapy",
+    "recommend treatment",
+    "treatment should",
+    "surgery is recommended",
+}
 REQUIRED_DRAFT_DISCLAIMER = "clinician review is required"
 APPEAL_DENIAL_REASON_LABEL = "denial reason identified from payer letter"
 
@@ -160,6 +174,40 @@ def _policy_source_text(db: Session, chunks: list[DocumentChunk]) -> str:
     return "\n\n".join(lines)
 
 
+def _patient_source_text(db: Session, chunks: list[DocumentChunk]) -> str:
+    lines = []
+    for chunk in chunks:
+        document = _document(db, chunk.document_id)
+        lines.append(f"[{document.file_name}, page {chunk.page_start}, type {document.document_type}]\n{chunk.text}")
+    return "\n\n".join(lines)
+
+
+def _criteria_source_text(criteria: list[PolicyCriterion]) -> str:
+    return "\n".join(
+        (
+            f"{criterion.criterion_code}: {criterion.requirement}\n"
+            f"Required evidence: {', '.join(criterion.required_evidence) or 'Not specified'}"
+        )
+        for criterion in criteria
+    )
+
+
+def _evidence_source_text(matches: list[EvidenceMatch], criteria_by_id: dict[str, PolicyCriterion]) -> str:
+    lines = []
+    for match in matches:
+        criterion = criteria_by_id.get(match.criterion_id)
+        criterion_code = criterion.criterion_code if criterion else match.criterion_id
+        citation = f"{match.source_file}, page {match.source_page}" if _has_required_citation(match) else "no citation"
+        lines.append(
+            (
+                f"{criterion_code}: status={_effective_match_status(match)}; "
+                f"summary={match.evidence_summary}; citation={citation}; "
+                f"missing={', '.join(match.missing_evidence) or 'none'}"
+            )
+        )
+    return "\n".join(lines)
+
+
 def _chunk_supports_source(chunk: DocumentChunk, *, source_page: str, source_quote: str) -> bool:
     try:
         cited_page = int(source_page)
@@ -190,6 +238,34 @@ def _grounded_policy_chunk_for_criterion(
         ):
             return chunk
     return None
+
+
+def _grounded_chunk_for_source(
+    db: Session,
+    chunks: list[DocumentChunk],
+    *,
+    source_file: str,
+    source_page: str,
+    source_quote: str,
+) -> DocumentChunk | None:
+    for chunk in chunks:
+        document = _document(db, chunk.document_id)
+        if document.file_name == source_file and _chunk_supports_source(
+            chunk,
+            source_page=source_page,
+            source_quote=source_quote,
+        ):
+            return chunk
+    return None
+
+
+def _citation_fields_present(*, source_file: str, source_page: str, source_quote: str) -> bool:
+    return any(value.strip() for value in [source_file, source_page, source_quote])
+
+
+def _readiness_has_unsafe_language(output: ReadinessOutput) -> bool:
+    model_text = "\n".join([output.summary, *output.highest_risk_items, *output.recommended_next_steps]).lower()
+    return any(term in model_text for term in UNSAFE_READINESS_TERMS)
 
 
 def _raise_structured_output_failure() -> None:
@@ -494,6 +570,232 @@ def update_criterion(
     return criterion
 
 
+def _extract_evidence_with_llm(
+    db: Session,
+    *,
+    case: PriorAuthCase,
+    criteria: list[PolicyCriterion],
+    patient_chunks: list[DocumentChunk],
+    organization_id: str,
+    user_id: str,
+) -> list[EvidenceMatch]:
+    model_version = llm_gateway.resolve_structured_model()
+    criteria_by_code: dict[str, PolicyCriterion] = {}
+    seen_normalized_codes: set[str] = set()
+    for criterion in criteria:
+        normalized_code = criterion.criterion_code.casefold()
+        if normalized_code in seen_normalized_codes:
+            _record_llm_generation_failure(
+                db,
+                organization_id=organization_id,
+                case_id=case.id,
+                run_type="evidence_matching",
+                model_version=model_version,
+                error_type="DuplicateStoredCriterionCode",
+                schema=EvidenceMatchingOutput.__name__,
+            )
+            _raise_structured_output_failure()
+        seen_normalized_codes.add(normalized_code)
+        criteria_by_code[criterion.criterion_code] = criterion
+
+    prompt = llm_gateway.build_structured_prompt(
+        task=(
+            "Match each payer criterion to patient-document evidence only. "
+            "Return exactly one match for every criterion code. "
+            "Do not cite payer policy, denial letters, or uncited fabricated evidence."
+        ),
+        schema_name=EvidenceMatchingOutput.__name__,
+        source_text=(
+            "Criteria:\n"
+            f"{_criteria_source_text(criteria)}\n\n"
+            "Patient document chunks available for citation:\n"
+            f"{_patient_source_text(db, patient_chunks)}"
+        ),
+    )
+    try:
+        raw_output = llm_gateway.generate_structured_output(
+            prompt,
+            schema=EvidenceMatchingOutput,
+            schema_name=EvidenceMatchingOutput.__name__,
+        )
+        output = llm_gateway.parse_structured_output_with_run(
+            db,
+            EvidenceMatchingOutput,
+            raw_output,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="evidence_matching",
+            model_version=model_version,
+        )
+    except llm_gateway.StructuredOutputValidationError:
+        _raise_structured_output_failure()
+    except llm_gateway.StructuredOutputError as exc:
+        _record_llm_generation_failure(
+            db,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="evidence_matching",
+            model_version=model_version,
+            error_type=type(exc).__name__,
+            schema=EvidenceMatchingOutput.__name__,
+        )
+        _raise_structured_output_failure()
+
+    if not output.matches:
+        _record_llm_generation_failure(
+            db,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="evidence_matching",
+            model_version=model_version,
+            error_type="EmptyEvidenceOutput",
+            schema=EvidenceMatchingOutput.__name__,
+        )
+        _raise_structured_output_failure()
+
+    seen_codes: set[str] = set()
+    grounded_chunks: dict[str, DocumentChunk | None] = {}
+    for item in output.matches:
+        criterion = criteria_by_code.get(item.criterion_code)
+        if criterion is None:
+            _record_llm_generation_failure(
+                db,
+                organization_id=organization_id,
+                case_id=case.id,
+                run_type="evidence_matching",
+                model_version=model_version,
+                error_type="UnknownCriterionCode",
+                schema=EvidenceMatchingOutput.__name__,
+            )
+            _raise_structured_output_failure()
+        if item.criterion_code in seen_codes:
+            _record_llm_generation_failure(
+                db,
+                organization_id=organization_id,
+                case_id=case.id,
+                run_type="evidence_matching",
+                model_version=model_version,
+                error_type="DuplicateCriterionCode",
+                schema=EvidenceMatchingOutput.__name__,
+            )
+            _raise_structured_output_failure()
+        seen_codes.add(item.criterion_code)
+
+        chunk = None
+        if _citation_fields_present(
+            source_file=item.source_file,
+            source_page=item.source_page,
+            source_quote=item.source_quote,
+        ):
+            if not all(value.strip() for value in [item.source_file, item.source_page, item.source_quote]):
+                _record_llm_generation_failure(
+                    db,
+                    organization_id=organization_id,
+                    case_id=case.id,
+                    run_type="evidence_matching",
+                    model_version=model_version,
+                    error_type="IncompleteEvidenceCitation",
+                    schema=EvidenceMatchingOutput.__name__,
+                )
+                _raise_structured_output_failure()
+            chunk = _grounded_chunk_for_source(
+                db,
+                patient_chunks,
+                source_file=item.source_file,
+                source_page=item.source_page,
+                source_quote=item.source_quote,
+            )
+            if chunk is None:
+                _record_llm_generation_failure(
+                    db,
+                    organization_id=organization_id,
+                    case_id=case.id,
+                    run_type="evidence_matching",
+                    model_version=model_version,
+                    error_type="UngroundedEvidenceCitation",
+                    schema=EvidenceMatchingOutput.__name__,
+                )
+                _raise_structured_output_failure()
+        grounded_chunks[item.criterion_code] = chunk
+
+    missing_codes = sorted(set(criteria_by_code) - seen_codes)
+    if missing_codes:
+        _record_llm_generation_failure(
+            db,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="evidence_matching",
+            model_version=model_version,
+            error_type="MissingCriterionMatch",
+            schema=EvidenceMatchingOutput.__name__,
+        )
+        _raise_structured_output_failure()
+
+    db.execute(
+        delete(EvidenceMatch).where(
+            EvidenceMatch.case_id == case.id,
+            EvidenceMatch.organization_id == organization_id,
+        )
+    )
+    run = AnalysisRun(
+        organization_id=organization_id,
+        case_id=case.id,
+        run_type="evidence_matching",
+        status="completed",
+        model_version=model_version,
+        metadata_json={
+            "schema": EvidenceMatchingOutput.__name__,
+            "analysis_mode": "llm",
+            "match_count": len(output.matches),
+        },
+    )
+    db.add(run)
+    db.flush()
+
+    matches: list[EvidenceMatch] = []
+    for item in output.matches:
+        criterion = criteria_by_code[item.criterion_code]
+        chunk = grounded_chunks[item.criterion_code]
+        document = _document(db, chunk.document_id) if chunk is not None else None
+        match = EvidenceMatch(
+            organization_id=organization_id,
+            case_id=case.id,
+            criterion_id=criterion.id,
+            analysis_run_id=run.id,
+            status=item.status,
+            evidence_summary=item.evidence_summary,
+            source_document_id=document.id if document is not None else None,
+            source_chunk_id=chunk.id if chunk is not None else None,
+            source_file=item.source_file if chunk is not None else "",
+            source_page=item.source_page if chunk is not None else "",
+            source_quote=item.source_quote if chunk is not None else "",
+            why_it_matters=item.why_it_matters,
+            missing_evidence=item.missing_evidence,
+            conflicting_evidence=item.conflicting_evidence,
+            recommended_action=item.recommended_action,
+            confidence=item.confidence,
+            model_version=model_version,
+        )
+        db.add(match)
+        matches.append(match)
+
+    case.status = "evidence_matched"
+    log_audit_event(
+        db,
+        organization_id=organization_id,
+        case_id=case.id,
+        user_id=user_id,
+        action="evidence.matched",
+        entity_type="case",
+        entity_id=case.id,
+        metadata={"match_count": len(matches), "analysis_mode": "llm"},
+    )
+    db.commit()
+    for match in matches:
+        db.refresh(match)
+    return matches
+
+
 def match_evidence(db: Session, *, case_id: str, organization_id: str, user_id: str) -> list[EvidenceMatch]:
     case = _case(db, case_id, organization_id)
     criteria = list_criteria(db, case_id=case.id, organization_id=organization_id)
@@ -505,6 +807,16 @@ def match_evidence(db: Session, *, case_id: str, organization_id: str, user_id: 
         organization_id=organization_id,
         document_types=PATIENT_DOCUMENT_TYPES,
     )
+
+    if llm_gateway.structured_analysis_enabled():
+        return _extract_evidence_with_llm(
+            db,
+            case=case,
+            criteria=criteria,
+            patient_chunks=patient_chunks,
+            organization_id=organization_id,
+            user_id=user_id,
+        )
 
     run = AnalysisRun(
         organization_id=organization_id,
@@ -642,13 +954,10 @@ def update_match_override(
     return match
 
 
-def generate_readiness_report(db: Session, *, case_id: str, organization_id: str, user_id: str) -> ReadinessReport:
-    case = _case(db, case_id, organization_id)
-    criteria = list_criteria(db, case_id=case.id, organization_id=organization_id)
-    matches = list_matches(db, case_id=case.id, organization_id=organization_id)
-    if not criteria or not matches:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Run criteria extraction and evidence matching first")
-
+def _compute_readiness(
+    criteria: list[PolicyCriterion],
+    matches: list[EvidenceMatch],
+) -> tuple[int, str, list[str], int]:
     matches_by_criterion = {match.criterion_id: match for match in matches}
     possible = 0.0
     earned = 0.0
@@ -671,6 +980,150 @@ def generate_readiness_report(db: Session, *, case_id: str, organization_id: str
         overall_status = "ready_for_review"
     else:
         overall_status = "needs_more_documentation"
+    met_count = sum(1 for match in matches if _is_citation_backed_met(match))
+    return score, overall_status, missing_items, met_count
+
+
+def _generate_readiness_report_with_llm(
+    db: Session,
+    *,
+    case: PriorAuthCase,
+    criteria: list[PolicyCriterion],
+    matches: list[EvidenceMatch],
+    organization_id: str,
+    user_id: str,
+) -> ReadinessReport:
+    score, overall_status, missing_items, met_count = _compute_readiness(criteria, matches)
+    criteria_by_id = {criterion.id: criterion for criterion in criteria}
+    model_version = llm_gateway.resolve_structured_model()
+    prompt = llm_gateway.build_structured_prompt(
+        task=(
+            "Summarize prior authorization documentation completeness for clinician review. "
+            f"The readiness_score is fixed at {score} and overall_status is fixed at {overall_status}; "
+            "do not describe approval likelihood or recommend diagnosis or treatment."
+        ),
+        schema_name=ReadinessOutput.__name__,
+        source_text=(
+            f"Case: {case.requested_service}\n"
+            f"Documentation-completeness score: {score}\n"
+            f"Overall status: {overall_status}\n\n"
+            "Criteria:\n"
+            f"{_criteria_source_text(criteria)}\n\n"
+            "Grounded evidence matches:\n"
+            f"{_evidence_source_text(matches, criteria_by_id)}"
+        ),
+    )
+    try:
+        raw_output = llm_gateway.generate_structured_output(
+            prompt,
+            schema=ReadinessOutput,
+            schema_name=ReadinessOutput.__name__,
+        )
+        output = llm_gateway.parse_structured_output_with_run(
+            db,
+            ReadinessOutput,
+            raw_output,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="readiness_report",
+            model_version=model_version,
+        )
+    except llm_gateway.StructuredOutputValidationError:
+        _raise_structured_output_failure()
+    except llm_gateway.StructuredOutputError as exc:
+        _record_llm_generation_failure(
+            db,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="readiness_report",
+            model_version=model_version,
+            error_type=type(exc).__name__,
+            schema=ReadinessOutput.__name__,
+        )
+        _raise_structured_output_failure()
+
+    if _readiness_has_unsafe_language(output):
+        _record_llm_generation_failure(
+            db,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="readiness_report",
+            model_version=model_version,
+            error_type="UnsafeReadinessOutput",
+            schema=ReadinessOutput.__name__,
+        )
+        _raise_structured_output_failure()
+
+    run = AnalysisRun(
+        organization_id=organization_id,
+        case_id=case.id,
+        run_type="readiness_report",
+        status="completed",
+        model_version=model_version,
+        metadata_json={
+            "schema": ReadinessOutput.__name__,
+            "analysis_mode": "llm",
+            "score_source": "deterministic_documentation_completeness",
+        },
+    )
+    db.add(run)
+    db.flush()
+    report_json = {
+        "met_count": met_count,
+        "missing_or_unclear_items": missing_items,
+        "score_interpretation": "documentation completeness only",
+        "analysis_mode": "llm",
+        "score_source": "deterministic_documentation_completeness",
+    }
+    report = ReadinessReport(
+        organization_id=organization_id,
+        case_id=case.id,
+        analysis_run_id=run.id,
+        readiness_score=score,
+        overall_status=overall_status,
+        summary=output.summary,
+        highest_risk_items=output.highest_risk_items[:5] or missing_items[:5],
+        recommended_next_steps=output.recommended_next_steps[:5]
+        or missing_items[:5]
+        or ["Clinician reviewer should confirm citations before submission."],
+        report_json=report_json,
+    )
+    db.add(report)
+    case.readiness_score = score
+    case.status = overall_status
+    log_audit_event(
+        db,
+        organization_id=organization_id,
+        case_id=case.id,
+        user_id=user_id,
+        action="readiness.generated",
+        entity_type="readiness_report",
+        entity_id=report.id,
+        metadata={"readiness_score": score, "overall_status": overall_status, "analysis_mode": "llm"},
+    )
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+def generate_readiness_report(db: Session, *, case_id: str, organization_id: str, user_id: str) -> ReadinessReport:
+    case = _case(db, case_id, organization_id)
+    criteria = list_criteria(db, case_id=case.id, organization_id=organization_id)
+    matches = list_matches(db, case_id=case.id, organization_id=organization_id)
+    if not criteria or not matches:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Run criteria extraction and evidence matching first")
+
+    if llm_gateway.structured_analysis_enabled():
+        return _generate_readiness_report_with_llm(
+            db,
+            case=case,
+            criteria=criteria,
+            matches=matches,
+            organization_id=organization_id,
+            user_id=user_id,
+        )
+
+    score, overall_status, missing_items, met_count = _compute_readiness(criteria, matches)
 
     run = AnalysisRun(
         organization_id=organization_id,
@@ -682,7 +1135,7 @@ def generate_readiness_report(db: Session, *, case_id: str, organization_id: str
     db.add(run)
     db.flush()
     report_json = {
-        "met_count": sum(1 for match in matches if _is_citation_backed_met(match)),
+        "met_count": met_count,
         "missing_or_unclear_items": missing_items,
         "score_interpretation": "documentation completeness only",
     }

@@ -1,3 +1,4 @@
+import json
 import importlib
 import os
 import sys
@@ -621,6 +622,85 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(run.metadata_json["analysis_mode"], "llm")
         self.assertEqual(run.metadata_json["criteria_count"], 1)
 
+    def test_llm_criteria_extraction_rejects_duplicate_criterion_codes_without_criteria(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-DUP-CRITERIA")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        raw_output = """
+        {
+          "criteria": [
+            {
+              "criterion_code": "C1",
+              "criterion_type": "documentation",
+              "requirement": "Document six weeks of conservative therapy.",
+              "required_evidence": ["Therapy dates"],
+              "is_required": true,
+              "source_quote": "Coverage requires six weeks of conservative therapy.",
+              "source_file": "policy.pdf",
+              "source_page": "1",
+              "confidence": 0.82,
+              "ambiguity_notes": []
+            },
+            {
+              "criterion_code": "C1",
+              "criterion_type": "medical_necessity",
+              "requirement": "Duplicate code should be rejected.",
+              "required_evidence": ["Duplicate"],
+              "is_required": true,
+              "source_quote": "Coverage requires six weeks of conservative therapy.",
+              "source_file": "policy.pdf",
+              "source_page": "1",
+              "confidence": 0.7,
+              "ambiguity_notes": []
+            }
+          ],
+          "missing_or_ambiguous_policy_info": []
+        }
+        """
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/criteria/extract",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 502)
+
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            criteria = list(
+                db.scalars(sqlalchemy.select(models.PolicyCriterion).where(models.PolicyCriterion.case_id == case_id))
+            )
+            run = db.scalar(
+                sqlalchemy.select(models.AnalysisRun).where(
+                    models.AnalysisRun.case_id == case_id,
+                    models.AnalysisRun.run_type == "criteria_extraction",
+                )
+            )
+
+        self.assertEqual(criteria, [])
+        self.assertEqual(run.status, "failed")
+        self.assertEqual(run.metadata_json["schema"], "CriteriaExtractionOutput")
+        self.assertNotIn("Duplicate code should be rejected", str(run.metadata_json))
+
     def test_llm_criteria_completed_run_records_resolved_model_version(self):
         client = self._client()
         coordinator_token = self._login(client)
@@ -966,6 +1046,361 @@ class PriorAuthWorkflowTests(unittest.TestCase):
 
         self.assertEqual(len(runs), 2)
         self.assertTrue(all(run.metadata_json["error_type"] == "StructuredOutputError" for run in runs))
+
+    def test_llm_evidence_matching_grounds_met_matches_to_patient_documents_only(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-EVIDENCE")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "patient_note",
+            "note.pdf",
+            b"%PDF-1.4\nThe patient completed six weeks of conservative therapy.",
+        )
+        criteria_response = client.post(
+            f"/api/cases/{case_id}/criteria/extract",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(criteria_response.status_code, 200, criteria_response.text)
+        criterion_code = criteria_response.json()["criteria"][0]["criterion_code"]
+
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        raw_output = f"""
+        {{
+          "matches": [
+            {{
+              "criterion_code": "{criterion_code}",
+              "status": "met",
+              "evidence_summary": "The patient note supports conservative therapy documentation.",
+              "source_quote": "The patient completed six weeks of conservative therapy.",
+              "source_file": "note.pdf",
+              "source_page": "1",
+              "why_it_matters": "This patient-document citation supports the payer criterion.",
+              "missing_evidence": [],
+              "conflicting_evidence": [],
+              "recommended_action": "Clinician reviewer should confirm this citation.",
+              "confidence": 0.84
+            }}
+          ]
+        }}
+        """
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/evidence/match",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 200, response.text)
+        matches = response.json()["matches"]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]["status"], "met")
+        self.assertEqual(matches[0]["source_file"], "note.pdf")
+
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            match = db.scalar(sqlalchemy.select(models.EvidenceMatch).where(models.EvidenceMatch.case_id == case_id))
+            run = db.scalar(
+                sqlalchemy.select(models.AnalysisRun).where(
+                    models.AnalysisRun.case_id == case_id,
+                    models.AnalysisRun.run_type == "evidence_matching",
+                )
+            )
+            source_document = db.get(models.Document, match.source_document_id)
+
+        self.assertEqual(source_document.document_type, "patient_note")
+        self.assertEqual(run.status, "completed")
+        self.assertEqual(run.metadata_json["schema"], "EvidenceMatchingOutput")
+        self.assertEqual(run.metadata_json["analysis_mode"], "llm")
+
+    def test_llm_evidence_matching_rejects_policy_document_citation_without_wiping_existing_matches(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-EVIDENCE-POLICY")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "patient_note",
+            "note.pdf",
+            b"%PDF-1.4\nThe patient completed six weeks of conservative therapy.",
+        )
+        criteria_response = client.post(
+            f"/api/cases/{case_id}/criteria/extract",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(criteria_response.status_code, 200, criteria_response.text)
+        baseline_response = client.post(
+            f"/api/cases/{case_id}/evidence/match",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(baseline_response.status_code, 200, baseline_response.text)
+        criterion_code = criteria_response.json()["criteria"][0]["criterion_code"]
+
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        raw_output = f"""
+        {{
+          "matches": [
+            {{
+              "criterion_code": "{criterion_code}",
+              "status": "met",
+              "evidence_summary": "This incorrectly cites the payer policy as patient evidence.",
+              "source_quote": "Coverage requires six weeks of conservative therapy.",
+              "source_file": "policy.pdf",
+              "source_page": "1",
+              "why_it_matters": "This should be rejected because it is not a patient document.",
+              "missing_evidence": [],
+              "conflicting_evidence": [],
+              "recommended_action": "Retry evidence matching.",
+              "confidence": 0.9
+            }}
+          ]
+        }}
+        """
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/evidence/match",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 502)
+        list_response = client.get(
+            f"/api/cases/{case_id}/evidence",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(
+            [item["id"] for item in list_response.json()["matches"]],
+            [item["id"] for item in baseline_response.json()["matches"]],
+        )
+
+    def test_llm_evidence_matching_rejects_duplicate_stored_criterion_codes_without_wiping_existing_matches(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id, criteria, baseline_matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
+
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            criterion = db.scalar(
+                sqlalchemy.select(models.PolicyCriterion).where(models.PolicyCriterion.case_id == case_id).limit(1)
+            )
+            duplicate = models.PolicyCriterion(
+                organization_id=criterion.organization_id,
+                case_id=criterion.case_id,
+                analysis_run_id=criterion.analysis_run_id,
+                criterion_code=criterion.criterion_code,
+                criterion_type=criterion.criterion_type,
+                requirement="Duplicate criterion code should fail closed.",
+                required_evidence=["Duplicate should not collapse evidence matching."],
+                is_required=criterion.is_required,
+                source_document_id=criterion.source_document_id,
+                source_file=criterion.source_file,
+                source_page=criterion.source_page,
+                source_quote=criterion.source_quote,
+                confidence=criterion.confidence,
+                ambiguity_notes=[],
+                extraction_version=criterion.extraction_version,
+            )
+            db.add(duplicate)
+            db.commit()
+
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        raw_output = json.dumps(
+            {
+                "matches": [
+                    {
+                        "criterion_code": unique_code,
+                        "status": "met",
+                        "evidence_summary": "The patient note supports conservative therapy documentation.",
+                        "source_quote": "six weeks of conservative therapy",
+                        "source_file": "note.pdf",
+                        "source_page": "1",
+                        "why_it_matters": "This patient-document citation supports the payer criterion.",
+                        "missing_evidence": [],
+                        "conflicting_evidence": [],
+                        "recommended_action": "Clinician reviewer should confirm this citation.",
+                        "confidence": 0.84,
+                    }
+                    for unique_code in sorted({item["criterion_code"] for item in criteria})
+                ]
+            }
+        )
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/evidence/match",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 502)
+        list_response = client.get(
+            f"/api/cases/{case_id}/evidence",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(
+            [item["id"] for item in list_response.json()["matches"]],
+            [item["id"] for item in baseline_matches],
+        )
+
+    def test_llm_readiness_report_persists_structured_documentation_completeness_report(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id, _criteria, _matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
+        baseline_response = client.get(
+            f"/api/cases/{case_id}/reports/latest",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(baseline_response.status_code, 200, baseline_response.text)
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        raw_output = """
+        {
+          "readiness_score": 75,
+          "overall_status": "needs_more_documentation",
+          "summary": "This readiness score reflects documentation completeness only.",
+          "highest_risk_items": ["C1: Clinician should review the conservative therapy citation."],
+          "recommended_next_steps": ["Clinician reviewer should confirm citation quality before submission."]
+        }
+        """
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/reports/readiness",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 200, response.text)
+        report = response.json()
+        self.assertEqual(report["readiness_score"], baseline_response.json()["readiness_score"])
+        self.assertEqual(report["overall_status"], baseline_response.json()["overall_status"])
+        self.assertEqual(report["report_json"]["score_interpretation"], "documentation completeness only")
+        self.assertEqual(report["report_json"]["analysis_mode"], "llm")
+
+    def test_llm_readiness_invalid_output_fails_closed_without_replacing_latest_report(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id, _criteria, _matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
+        baseline_response = client.get(
+            f"/api/cases/{case_id}/reports/latest",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(baseline_response.status_code, 200, baseline_response.text)
+
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        try:
+            with patch.object(
+                llm_gateway,
+                "generate_structured_output",
+                return_value='{"readiness_score":150,"overall_status":"ready_for_review","summary":"Invalid"}',
+            ):
+                response = client.post(
+                    f"/api/cases/{case_id}/reports/readiness",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 502)
+        latest_response = client.get(
+            f"/api/cases/{case_id}/reports/latest",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(latest_response.json()["id"], baseline_response.json()["id"])
+
+    def test_llm_readiness_unsafe_list_output_fails_closed_without_replacing_latest_report(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id, _criteria, _matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
+        baseline_response = client.get(
+            f"/api/cases/{case_id}/reports/latest",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(baseline_response.status_code, 200, baseline_response.text)
+
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        raw_output = """
+        {
+          "readiness_score": 75,
+          "overall_status": "needs_more_documentation",
+          "summary": "This readiness score reflects documentation completeness only.",
+          "highest_risk_items": ["Approval is likely after reviewer confirmation."],
+          "recommended_next_steps": ["Start physical therapy before submission."]
+        }
+        """
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/reports/readiness",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 502)
+        latest_response = client.get(
+            f"/api/cases/{case_id}/reports/latest",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(latest_response.json()["id"], baseline_response.json()["id"])
 
     def test_draft_edit_blocks_approval_until_citations_are_reverified(self):
         client = self._client()

@@ -26,13 +26,22 @@
 - Phase 3 verification passed after review fixes: backend unittest discovery with 67 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
 - Phase 4 foundation is now started but not complete: added `server/services/llm_gateway.py`, `server/services/analysis_schemas.py`, Pydantic structured-output parsing, untrusted-document prompt framing, redacted failed `AnalysisRun` recording, and an opt-in `PRIORAUTH_ANALYSIS_MODE=llm` criteria extraction branch.
 - Phase 4 focused verification passed after review fixes: `tests.test_llm_gateway` with 9 tests, seven LLM criteria integration tests for valid output, invalid output, ungrounded citations, blank source quotes, empty output, repeated provider failures, and provider failures with underlying causes; backend unittest discovery with 83 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
-- Remaining Phase 4 scope: extend the opt-in LLM branch to evidence/readiness and expand eval scoring beyond smoke readiness/citation/safety checks.
+- Remaining Phase 4 scope: expand eval scoring beyond smoke readiness/citation/safety checks.
 - Current Phase 4 provider-boundary slice:
   - [x] Add tests for the Groq JSON-schema request boundary and direct SDK dependency.
   - [x] Implement `generate_structured_output` through the Groq SDK while preserving fail-closed behavior and redacted errors.
   - [x] Update README/env docs for the real structured provider path.
   - [x] Verify focused gateway tests, backend discovery, client gates, and review findings.
-- Phase 4 provider-boundary verification passed: focused gateway/deployment/criteria tests passed 24 tests, backend unittest discovery passed 88 tests, client lint/typecheck passed, Vitest passed 47 tests across 10 files, Next production build passed, and Playwright desktop/mobile e2e passed 8 tests.
+- Phase 4 provider-boundary verification passed after review fixes: focused gateway/deployment/criteria tests passed 27 tests, backend unittest discovery passed 91 tests, client lint/typecheck passed, Vitest passed 47 tests across 10 files, Next production build passed, and Playwright desktop/mobile e2e passed 8 tests.
+- Current Phase 4 evidence/readiness LLM slice:
+  - [x] Add tests for opt-in structured evidence matching and readiness reports.
+  - [x] Ground `met` evidence matches to patient-document chunks only and fail closed on payer-policy or fabricated citations.
+  - [x] Persist LLM readiness reports with documentation-completeness semantics and safe failed-run metadata.
+  - [x] Verify focused backend tests, full backend discovery, and client gates.
+  - [x] Complete focused review and address findings.
+- Phase 4 evidence/readiness LLM verification passed: focused Phase 4 tests passed 27 tests, backend unittest discovery passed 95 tests, client lint/typecheck passed, Vitest passed 47 tests across 10 files, Next production build passed, and Playwright desktop/mobile e2e passed 8 tests.
+- Phase 4 evidence/readiness review fixes added fail-closed coverage for duplicate LLM criterion codes, duplicate stored criterion codes, and unsafe readiness list text; focused `tests.test_llm_gateway` plus `tests.test_priorauth_workflow` passed 52 tests after fixes.
+- Phase 4 evidence/readiness review-fix backend discovery passed 98 tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.
