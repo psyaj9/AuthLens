@@ -6,8 +6,24 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
+
+
+PASSWORD_RESET_DELIVERY_ENV_KEYS = (
+    "ENVIRONMENT",
+    "PASSWORD_RESET_DELIVERY_MODE",
+    "PASSWORD_RESET_PUBLIC_BASE_URL",
+    "PASSWORD_RESET_SMTP_HOST",
+    "PASSWORD_RESET_SMTP_PORT",
+    "PASSWORD_RESET_SMTP_USERNAME",
+    "PASSWORD_RESET_SMTP_PASSWORD",
+    "PASSWORD_RESET_EMAIL_FROM",
+    "PASSWORD_RESET_SMTP_USE_TLS",
+    "PASSWORD_RESET_EXTERNAL_WEBHOOK_URL",
+    "PASSWORD_RESET_EXTERNAL_WEBHOOK_TOKEN",
+)
 
 
 class PriorAuthWorkflowTests(unittest.TestCase):
@@ -66,6 +82,27 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         session = importlib.import_module("db.session")
         session.init_db()
         return TestClient(main.app)
+
+    def _apply_password_reset_env(self, values):
+        original = {key: os.environ.get(key) for key in PASSWORD_RESET_DELIVERY_ENV_KEYS}
+        for key in PASSWORD_RESET_DELIVERY_ENV_KEYS:
+            os.environ.pop(key, None)
+        os.environ.update(values)
+        return original
+
+    def _restore_password_reset_env(self, original):
+        for key, value in original.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def _password_reset_token_count(self):
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            return db.scalar(sqlalchemy.select(sqlalchemy.func.count()).select_from(models.PasswordResetToken))
 
     def _role_for_email(self, email):
         if email.startswith("admin"):
@@ -381,86 +418,172 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         email = "reset-production@example.test"
         self._create_test_user(email=email, password="old-password", role="admin")
 
-        original_env = {
-            "ENVIRONMENT": os.environ.get("ENVIRONMENT"),
-            "PASSWORD_RESET_DELIVERY_MODE": os.environ.get("PASSWORD_RESET_DELIVERY_MODE"),
-        }
-        os.environ["ENVIRONMENT"] = "production"
-        os.environ.pop("PASSWORD_RESET_DELIVERY_MODE", None)
+        original_env = self._apply_password_reset_env({"ENVIRONMENT": "production"})
         try:
             response = client.post("/api/auth/forgot-password", json={"email": email})
         finally:
-            for key, value in original_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            self._restore_password_reset_env(original_env)
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"error": "Password reset delivery is not configured"})
-
-        session = importlib.import_module("db.session")
-        models = importlib.import_module("models.priorauth")
-        sqlalchemy = importlib.import_module("sqlalchemy")
-        with session.SessionLocal() as db:
-            token_count = db.scalar(sqlalchemy.select(sqlalchemy.func.count()).select_from(models.PasswordResetToken))
-
-        self.assertEqual(token_count, 0)
+        self.assertEqual(self._password_reset_token_count(), 0)
 
     def test_production_forgot_password_rejects_invalid_reset_delivery_mode(self):
         client = self._client()
         email = "reset-production-invalid-mode@example.test"
         self._create_test_user(email=email, password="old-password", role="admin")
 
-        original_env = {
-            "ENVIRONMENT": os.environ.get("ENVIRONMENT"),
-            "PASSWORD_RESET_DELIVERY_MODE": os.environ.get("PASSWORD_RESET_DELIVERY_MODE"),
-        }
-        os.environ["ENVIRONMENT"] = "production"
-        os.environ["PASSWORD_RESET_DELIVERY_MODE"] = "debug"
+        original_env = self._apply_password_reset_env(
+            {
+                "ENVIRONMENT": "production",
+                "PASSWORD_RESET_DELIVERY_MODE": "debug",
+            }
+        )
         try:
             response = client.post("/api/auth/forgot-password", json={"email": email})
         finally:
-            for key, value in original_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            self._restore_password_reset_env(original_env)
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"error": "Password reset delivery is not configured"})
+        self.assertEqual(self._password_reset_token_count(), 0)
 
-        session = importlib.import_module("db.session")
-        models = importlib.import_module("models.priorauth")
-        sqlalchemy = importlib.import_module("sqlalchemy")
-        with session.SessionLocal() as db:
-            token_count = db.scalar(sqlalchemy.select(sqlalchemy.func.count()).select_from(models.PasswordResetToken))
-
-        self.assertEqual(token_count, 0)
-
-    def test_production_forgot_password_with_delivery_config_does_not_expose_reset_token(self):
+    def test_production_forgot_password_email_requires_smtp_config(self):
         client = self._client()
-        email = "reset-production-configured@example.test"
+        email = "reset-production-email-missing@example.test"
         self._create_test_user(email=email, password="old-password", role="admin")
 
-        original_env = {
-            "ENVIRONMENT": os.environ.get("ENVIRONMENT"),
-            "PASSWORD_RESET_DELIVERY_MODE": os.environ.get("PASSWORD_RESET_DELIVERY_MODE"),
-        }
-        os.environ["ENVIRONMENT"] = "production"
-        os.environ["PASSWORD_RESET_DELIVERY_MODE"] = "external"
+        original_env = self._apply_password_reset_env(
+            {
+                "ENVIRONMENT": "production",
+                "PASSWORD_RESET_DELIVERY_MODE": "email",
+                "PASSWORD_RESET_PUBLIC_BASE_URL": "https://client.example.test",
+            }
+        )
         try:
             response = client.post("/api/auth/forgot-password", json={"email": email})
         finally:
-            for key, value in original_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            self._restore_password_reset_env(original_env)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"error": "Password reset delivery is not configured"})
+        self.assertEqual(self._password_reset_token_count(), 0)
+
+    def test_production_forgot_password_email_delivers_reset_link_without_exposing_token(self):
+        client = self._client()
+        email = "reset-production-email@example.test"
+        self._create_test_user(email=email, password="old-password", role="admin")
+
+        original_env = self._apply_password_reset_env(
+            {
+                "ENVIRONMENT": "production",
+                "PASSWORD_RESET_DELIVERY_MODE": "email",
+                "PASSWORD_RESET_PUBLIC_BASE_URL": "https://client.example.test/app",
+                "PASSWORD_RESET_SMTP_HOST": "smtp.example.test",
+                "PASSWORD_RESET_SMTP_PORT": "587",
+                "PASSWORD_RESET_SMTP_USERNAME": "smtp-user",
+                "PASSWORD_RESET_SMTP_PASSWORD": "smtp-password",
+                "PASSWORD_RESET_EMAIL_FROM": "support@example.test",
+                "PASSWORD_RESET_SMTP_USE_TLS": "true",
+            }
+        )
+        try:
+            with patch("services.password_reset_delivery.deliver_password_reset_email") as deliver_email:
+                response = client.post("/api/auth/forgot-password", json={"email": email})
+        finally:
+            self._restore_password_reset_env(original_env)
 
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["message"], "If an account exists, password reset instructions have been prepared.")
         self.assertIsNone(response.json()["reset_token"])
+        deliver_email.assert_called_once()
+        delivered_email, reset_link = deliver_email.call_args.args
+        self.assertEqual(delivered_email, email)
+        parsed_link = urlparse(reset_link)
+        self.assertEqual(f"{parsed_link.scheme}://{parsed_link.netloc}{parsed_link.path}", "https://client.example.test/app/")
+        self.assertTrue(parse_qs(parsed_link.query)["reset_token"][0])
+        self.assertEqual(self._password_reset_token_count(), 1)
+
+    def test_production_forgot_password_external_requires_webhook_config(self):
+        client = self._client()
+        email = "reset-production-external-missing@example.test"
+        self._create_test_user(email=email, password="old-password", role="admin")
+
+        original_env = self._apply_password_reset_env(
+            {
+                "ENVIRONMENT": "production",
+                "PASSWORD_RESET_DELIVERY_MODE": "external",
+                "PASSWORD_RESET_PUBLIC_BASE_URL": "https://client.example.test",
+            }
+        )
+        try:
+            response = client.post("/api/auth/forgot-password", json={"email": email})
+        finally:
+            self._restore_password_reset_env(original_env)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"error": "Password reset delivery is not configured"})
+        self.assertEqual(self._password_reset_token_count(), 0)
+
+    def test_production_forgot_password_external_delivers_reset_link_without_exposing_token(self):
+        client = self._client()
+        email = "reset-production-configured@example.test"
+        user_id = self._create_test_user(email=email, password="old-password", role="admin")
+
+        original_env = self._apply_password_reset_env(
+            {
+                "ENVIRONMENT": "production",
+                "PASSWORD_RESET_DELIVERY_MODE": "external",
+                "PASSWORD_RESET_PUBLIC_BASE_URL": "https://client.example.test",
+                "PASSWORD_RESET_EXTERNAL_WEBHOOK_URL": "https://ops.example.test/reset",
+                "PASSWORD_RESET_EXTERNAL_WEBHOOK_TOKEN": "handoff-token",
+            }
+        )
+        try:
+            with patch("services.password_reset_delivery.deliver_password_reset_external") as deliver_external:
+                response = client.post("/api/auth/forgot-password", json={"email": email})
+        finally:
+            self._restore_password_reset_env(original_env)
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["message"], "If an account exists, password reset instructions have been prepared.")
+        self.assertIsNone(response.json()["reset_token"])
+        deliver_external.assert_called_once()
+        delivered_email, reset_link, delivered_user_id, organization_id, expires_in_minutes = deliver_external.call_args.args
+        self.assertEqual(delivered_email, email)
+        self.assertEqual(delivered_user_id, user_id)
+        self.assertEqual(organization_id, "org_test_spine")
+        self.assertEqual(expires_in_minutes, 60)
+        self.assertTrue(parse_qs(urlparse(reset_link).query)["reset_token"][0])
+        self.assertEqual(self._password_reset_token_count(), 1)
+
+    def test_production_forgot_password_delivery_failure_rolls_back_reset_token(self):
+        client = self._client()
+        email = "reset-production-delivery-failure@example.test"
+        self._create_test_user(email=email, password="old-password", role="admin")
+
+        original_env = self._apply_password_reset_env(
+            {
+                "ENVIRONMENT": "production",
+                "PASSWORD_RESET_DELIVERY_MODE": "external",
+                "PASSWORD_RESET_PUBLIC_BASE_URL": "https://client.example.test",
+                "PASSWORD_RESET_EXTERNAL_WEBHOOK_URL": "https://ops.example.test/reset",
+                "PASSWORD_RESET_EXTERNAL_WEBHOOK_TOKEN": "handoff-token",
+            }
+        )
+        try:
+            delivery = importlib.import_module("services.password_reset_delivery")
+            with patch(
+                "services.password_reset_delivery.deliver_password_reset_external",
+                side_effect=delivery.PasswordResetDeliveryError("send failed"),
+            ):
+                response = client.post("/api/auth/forgot-password", json={"email": email})
+        finally:
+            self._restore_password_reset_env(original_env)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"error": "Password reset delivery failed"})
+        self.assertEqual(self._password_reset_token_count(), 0)
 
     def test_coordinator_can_create_and_list_org_scoped_cases(self):
         client = self._client()

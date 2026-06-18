@@ -39,6 +39,20 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("PASSWORD_RESET_DELIVERY_MODE", render_yaml)
         self.assertIn("email", readme)
         self.assertIn("external", readme)
+        for variable in [
+            "PASSWORD_RESET_PUBLIC_BASE_URL",
+            "PASSWORD_RESET_SMTP_HOST",
+            "PASSWORD_RESET_SMTP_PORT",
+            "PASSWORD_RESET_SMTP_USERNAME",
+            "PASSWORD_RESET_SMTP_PASSWORD",
+            "PASSWORD_RESET_EMAIL_FROM",
+            "PASSWORD_RESET_SMTP_USE_TLS",
+            "PASSWORD_RESET_EXTERNAL_WEBHOOK_URL",
+            "PASSWORD_RESET_EXTERNAL_WEBHOOK_TOKEN",
+        ]:
+            self.assertIn(variable, readme)
+            self.assertIn(f"{variable}=", env_example)
+            self.assertIn(variable, render_yaml)
 
     def test_circleci_runs_synthetic_eval_gate(self):
         circleci_config = (PROJECT_ROOT / ".circleci" / "config.yml").read_text(encoding="utf-8")

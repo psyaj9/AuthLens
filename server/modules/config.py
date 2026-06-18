@@ -94,10 +94,38 @@ def get_password_reset_delivery_mode() -> str:
     return os.getenv("PASSWORD_RESET_DELIVERY_MODE", "").strip().lower()
 
 
+def _has_nonblank_env(name: str) -> bool:
+    value = os.getenv(name)
+    return value is not None and bool(value.strip())
+
+
+def _has_positive_int_env(name: str) -> bool:
+    try:
+        return int(os.getenv(name, "")) > 0
+    except ValueError:
+        return False
+
+
 def password_reset_delivery_configured() -> bool:
     if not is_production():
         return True
-    return get_password_reset_delivery_mode() in PRODUCTION_PASSWORD_RESET_DELIVERY_MODES
+    mode = get_password_reset_delivery_mode()
+    if mode == "email":
+        return (
+            _has_nonblank_env("PASSWORD_RESET_PUBLIC_BASE_URL")
+            and _has_nonblank_env("PASSWORD_RESET_SMTP_HOST")
+            and _has_positive_int_env("PASSWORD_RESET_SMTP_PORT")
+            and _has_nonblank_env("PASSWORD_RESET_SMTP_USERNAME")
+            and _has_nonblank_env("PASSWORD_RESET_SMTP_PASSWORD")
+            and _has_nonblank_env("PASSWORD_RESET_EMAIL_FROM")
+        )
+    if mode == "external":
+        return (
+            _has_nonblank_env("PASSWORD_RESET_PUBLIC_BASE_URL")
+            and _has_nonblank_env("PASSWORD_RESET_EXTERNAL_WEBHOOK_URL")
+            and _has_nonblank_env("PASSWORD_RESET_EXTERNAL_WEBHOOK_TOKEN")
+        )
+    return False
 
 
 def _parse_int_env(name: str, default: int) -> int:

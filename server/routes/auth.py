@@ -9,7 +9,7 @@ from db.session import get_db
 from dependencies.auth import CurrentUser, get_current_user
 from models.priorauth import Organization, OrganizationMembership, PasswordResetToken, User
 from modules.auth import create_access_token, hash_password, hash_reset_token, verify_password
-from modules.config import is_production, password_reset_delivery_configured
+from modules.config import get_password_reset_delivery_mode, is_production, password_reset_delivery_configured
 from modules.rate_limit import ensure_not_limited, record_and_enforce, record_attempt
 from modules.schemas import (
     AuthResponse,
@@ -23,6 +23,7 @@ from modules.schemas import (
     UserProfile,
 )
 from services.audit import log_audit_event
+from services import password_reset_delivery
 
 
 router = APIRouter()
@@ -131,7 +132,8 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
     email = normalize_email(payload.email)
     record_and_enforce("forgot-password", request, email)
-    if is_production() and not password_reset_delivery_configured():
+    production = is_production()
+    if production and not password_reset_delivery_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Password reset delivery is not configured",
@@ -167,7 +169,29 @@ async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: 
                 entity_type="user",
                 entity_id=user.id,
             )
-        if not is_production():
+        if production:
+            try:
+                password_reset_delivery.deliver_password_reset(
+                    get_password_reset_delivery_mode(),
+                    email,
+                    raw_token,
+                    user.id,
+                    membership.organization_id if membership is not None else "",
+                    RESET_TOKEN_EXPIRE_MINUTES,
+                )
+            except password_reset_delivery.PasswordResetDeliveryConfigError as exc:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Password reset delivery is not configured",
+                ) from exc
+            except password_reset_delivery.PasswordResetDeliveryError as exc:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Password reset delivery failed",
+                ) from exc
+        else:
             reset_token = raw_token
         db.commit()
     return ForgotPasswordResponse(message=RESET_MESSAGE, reset_token=reset_token)
