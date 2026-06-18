@@ -27,8 +27,8 @@ async function expectCreateExportProxy(
       case_id: "case_123",
       export_type: "packet",
       status: "ready",
-      file_name: "packet.md",
-      mime_type: "text/markdown",
+      file_name: "packet.pdf",
+      mime_type: "application/pdf",
       content_markdown: "# Packet",
       manifest_json: { synthetic_only: true },
       created_at: "2026-06-18T00:00:00Z"
@@ -93,13 +93,14 @@ describe("export proxy routes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("downloads export markdown as an attachment through the backend", async () => {
+  it("downloads export PDFs as attachments through the backend", async () => {
     process.env.BACKEND_API_URL = "https://backend.example.test";
+    const pdfBytes = new TextEncoder().encode("%PDF-1.7\n% AuthLens packet\n%%EOF");
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response("# Packet", {
+      new Response(pdfBytes, {
         headers: {
-          "content-type": "text/markdown; charset=utf-8",
-          "content-disposition": 'attachment; filename="packet.md"',
+          "content-type": "application/pdf",
+          "content-disposition": 'attachment; filename="packet.pdf"',
           "x-content-type-options": "nosniff"
         }
       })
@@ -112,10 +113,11 @@ describe("export proxy routes", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
-    expect(response.headers.get("content-disposition")).toBe('attachment; filename="packet.md"');
+    expect(response.headers.get("content-type")).toBe("application/pdf");
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="packet.pdf"');
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    await expect(response.text()).resolves.toBe("# Packet");
+    const downloadedBytes = new Uint8Array(await response.arrayBuffer());
+    expect(new TextDecoder().decode(downloadedBytes)).toBe("%PDF-1.7\n% AuthLens packet\n%%EOF");
     expect(fetchMock).toHaveBeenCalledWith(
       "https://backend.example.test/api/exports/export_123/download",
       expect.objectContaining({ method: "GET" })

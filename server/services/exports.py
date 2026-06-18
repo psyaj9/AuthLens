@@ -1,7 +1,14 @@
 import re
+from io import BytesIO
 from datetime import UTC, datetime
+from xml.sax.saxutils import escape
 
 from fastapi import HTTPException, status
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,6 +27,90 @@ EXPORT_NOTICE = (
     "Synthetic/de-identified use only. Clinician review is required before submission. "
     "This export does not diagnose, recommend treatment, or guarantee payer approval."
 )
+PDF_MIME_TYPE = "application/pdf"
+
+
+def _inline_pdf_markup(text: str) -> str:
+    escaped = escape(text)
+    return re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", escaped)
+
+
+def _pdf_footer(canvas, doc):
+    canvas.saveState()
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(colors.HexColor("#54615a"))
+    canvas.drawString(0.75 * inch, 0.45 * inch, "AuthLens PriorAuth Evidence Copilot")
+    canvas.drawRightString(7.75 * inch, 0.45 * inch, f"Page {doc.page}")
+    canvas.restoreState()
+
+
+def render_export_pdf(content_markdown: str) -> bytes:
+    buffer = BytesIO()
+    styles = getSampleStyleSheet()
+    heading = ParagraphStyle(
+        "AuthLensHeading",
+        parent=styles["Heading1"],
+        fontName="Helvetica-Bold",
+        fontSize=16,
+        leading=20,
+        textColor=colors.HexColor("#0f2621"),
+        spaceAfter=10,
+    )
+    subheading = ParagraphStyle(
+        "AuthLensSubheading",
+        parent=styles["Heading2"],
+        fontName="Helvetica-Bold",
+        fontSize=12,
+        leading=15,
+        textColor=colors.HexColor("#0f2621"),
+        spaceBefore=8,
+        spaceAfter=6,
+    )
+    body = ParagraphStyle(
+        "AuthLensBody",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=9.5,
+        leading=13,
+        textColor=colors.HexColor("#1f2e29"),
+        spaceAfter=5,
+    )
+    bullet = ParagraphStyle(
+        "AuthLensBullet",
+        parent=body,
+        leftIndent=14,
+        firstLineIndent=-8,
+        spaceAfter=4,
+    )
+    story = []
+    for raw_line in content_markdown.splitlines():
+        line = raw_line.strip()
+        if not line:
+            story.append(Spacer(1, 5))
+        elif line.startswith("# "):
+            story.append(Paragraph(_inline_pdf_markup(line[2:]), heading))
+        elif line.startswith("## "):
+            story.append(Paragraph(_inline_pdf_markup(line[3:]), subheading))
+        elif line.startswith("- "):
+            story.append(Paragraph(_inline_pdf_markup(line[2:]), bullet, bulletText="-"))
+        else:
+            story.append(Paragraph(_inline_pdf_markup(line), body))
+
+    if not story:
+        story.append(Paragraph("No export content generated.", body))
+
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=0.75 * inch,
+        leftMargin=0.75 * inch,
+        topMargin=0.75 * inch,
+        bottomMargin=0.75 * inch,
+        title="AuthLens export",
+        pageCompression=0,
+    )
+    document.build(story, onFirstPage=_pdf_footer, onLaterPages=_pdf_footer)
+    return buffer.getvalue()
 
 
 def _case(db: Session, case_id: str, organization_id: str) -> PriorAuthCase:
@@ -142,7 +233,7 @@ def _store_export(
         export_type=export_type,
         status="ready",
         file_name=file_name,
-        mime_type="text/markdown",
+        mime_type=PDF_MIME_TYPE,
         content_markdown=content_markdown,
         manifest_json=manifest_json,
     )
@@ -197,7 +288,7 @@ def create_readiness_export(db: Session, *, case_id: str, organization_id: str, 
         organization_id=organization_id,
         user_id=user_id,
         export_type="readiness_report",
-        file_name=f"{_slug(case.patient_label)}-readiness-report.md",
+        file_name=f"{_slug(case.patient_label)}-readiness-report.pdf",
         content_markdown=content,
         manifest_json=manifest,
     )
@@ -228,7 +319,7 @@ def create_letter_export(db: Session, *, case_id: str, organization_id: str, use
         organization_id=organization_id,
         user_id=user_id,
         export_type="letter",
-        file_name=f"{_slug(case.patient_label)}-prior-auth-letter.md",
+        file_name=f"{_slug(case.patient_label)}-prior-auth-letter.pdf",
         content_markdown=content,
         manifest_json=manifest,
     )
@@ -279,7 +370,7 @@ def create_packet_export(db: Session, *, case_id: str, organization_id: str, use
         organization_id=organization_id,
         user_id=user_id,
         export_type="packet",
-        file_name=f"{_slug(case.patient_label)}-prior-auth-packet.md",
+        file_name=f"{_slug(case.patient_label)}-prior-auth-packet.pdf",
         content_markdown=content,
         manifest_json=manifest,
     )

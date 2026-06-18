@@ -174,8 +174,8 @@ async function mockAuthenticatedReviewerWorkspace(page: Page, options: Workspace
         case_id: "case_1",
         export_type: "packet",
         status: "ready",
-        file_name: "syn-lmri-review-prior-auth-packet.md",
-        mime_type: "text/markdown",
+        file_name: "syn-lmri-review-prior-auth-packet.pdf",
+        mime_type: "application/pdf",
         content_markdown: "# Packet",
         manifest_json: { synthetic_only: true },
         created_at: "2026-06-18T00:00:00Z"
@@ -245,7 +245,7 @@ test.describe("PriorAuth Evidence Copilot", () => {
     await expect(page.getByRole("button", { name: "Export packet" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Export packet" }).click();
-    await expect(page.getByRole("link", { name: /syn-lmri-review-prior-auth-packet\.md/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /syn-lmri-review-prior-auth-packet\.pdf/i })).toBeVisible();
   });
 
   test("generates appeal drafts from appeal cases with denial letters", async ({ page }) => {

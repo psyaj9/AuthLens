@@ -811,6 +811,34 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(approve_response.status_code, 200, approve_response.text)
         self.assertEqual(approve_response.json()["status"], "approved")
 
+    def test_deterministic_criteria_required_evidence_keeps_complete_text(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-FULL-CRITERIA")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            (
+                b"%PDF-1.4\nCoverage requires documentation showing a completed trial of conservative therapy "
+                b"lasting at least six weeks, including start date, end date, response to therapy, "
+                b"and current functional limitation."
+            ),
+        )
+
+        criteria_response = client.post(
+            f"/api/cases/{case_id}/criteria/extract",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+
+        self.assertEqual(criteria_response.status_code, 200, criteria_response.text)
+        criterion = criteria_response.json()["criteria"][0]
+        required_evidence = criterion["required_evidence"][0]
+        self.assertIn("current functional limitation", required_evidence)
+        self.assertGreater(len(required_evidence), 140)
+
     def test_llm_criteria_extraction_invalid_output_fails_closed_without_criteria(self):
         client = self._client()
         coordinator_token = self._login(client)

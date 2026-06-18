@@ -259,7 +259,7 @@ class ExportArtifact(Base):
     export_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(64), nullable=False, default="ready")
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    mime_type: Mapped[str] = mapped_column(String(128), nullable=False, default="text/markdown")
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False, default="application/pdf")
     content_markdown: Mapped[str] = mapped_column(Text, nullable=False)
     manifest_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

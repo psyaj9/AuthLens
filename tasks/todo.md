@@ -1,5 +1,17 @@
 # Next PRD Implementation Phases
 
+## Production UI Polish And PDF Export Pass
+
+- [ ] Add focused regression tests for PDF exports, case archive/delete client flow, and user-facing label formatting.
+- [ ] Implement backend PDF export download and update export metadata/UI copy.
+- [ ] Add case deletion from the work queue and normalize raw status/score labels in the workspace.
+- [ ] Improve generated text completeness/readability where truncation is visible.
+- [ ] Run backend/client verification and browser render checks.
+
+## Review
+
+- Pending.
+
 ## Production Auth Token Parse Bug
 
 - [x] Trace the production `/api/auth/register` and `/api/auth/login` response flow through the Next proxy and FastAPI route.

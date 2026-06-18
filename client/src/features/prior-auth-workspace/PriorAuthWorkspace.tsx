@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   ClipboardCheck,
@@ -11,6 +11,7 @@ import {
   Plus,
   Save,
   ShieldCheck,
+  Trash2,
   UploadCloud
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { StatusPill } from "@/components/ui/status-pill";
 import {
   approveDraft,
+  archiveCase,
   createAppealDraft,
   createCase,
   createLetterExport,
@@ -45,6 +47,13 @@ import {
   uploadCaseDocument,
   verifyDraftCitations
 } from "@/lib/api/client";
+import {
+  formatCaseTypeLabel,
+  formatDocumentTypeLabel,
+  formatScoreLabel,
+  formatStatusLabel,
+  nextSyntheticCaseLabel
+} from "./formatters";
 import type {
   CaseDocument,
   CaseSummary,
@@ -361,7 +370,8 @@ export function PriorAuthWorkspace() {
   );
   const approvedDraftAvailable = drafts.some((draft) => draft.status === "approved");
   const appealDraftAvailable = selectedCase?.case_type === "appeal";
-  const canGenerateDraft = user?.role === "admin" || user?.role === "coordinator";
+  const canManageCases = user?.role === "admin" || user?.role === "coordinator";
+  const canGenerateDraft = canManageCases;
 
   const refreshCases = useCallback(async () => {
     const nextCases = await listCases();
@@ -464,7 +474,13 @@ export function PriorAuthWorkspace() {
 
   function handleCreateCase() {
     void runAction(async () => {
-      const created = await createCase(defaultCase);
+      const created = await createCase({
+        ...defaultCase,
+        patient_label: nextSyntheticCaseLabel(
+          cases.map((caseItem) => caseItem.patient_label),
+          "SYN-LMRI"
+        )
+      });
       await refreshCases();
       setSelectedCaseId(created.id);
     }, "Synthetic prior authorization case created.");
@@ -472,10 +488,41 @@ export function PriorAuthWorkspace() {
 
   function handleCreateAppealCase() {
     void runAction(async () => {
-      const created = await createCase(defaultAppealCase);
+      const created = await createCase({
+        ...defaultAppealCase,
+        patient_label: nextSyntheticCaseLabel(
+          cases.map((caseItem) => caseItem.patient_label),
+          "SYN-LMRI-APPEAL"
+        )
+      });
       await refreshCases();
       setSelectedCaseId(created.id);
     }, "Synthetic appeal case created.");
+  }
+
+  function handleArchiveCase(caseItem: CaseSummary, event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    const confirmed = window.confirm(`Delete ${caseItem.patient_label} from the active work queue?`);
+    if (!confirmed) {
+      return;
+    }
+
+    void runAction(async () => {
+      await archiveCase(caseItem.id);
+      const remainingCases = cases.filter((item) => item.id !== caseItem.id);
+      setCases(remainingCases);
+      if (selectedCase?.id === caseItem.id) {
+        setSelectedCaseId(remainingCases[0]?.id);
+        setDocuments([]);
+        setCriteria([]);
+        setEvidence([]);
+        setDrafts([]);
+        setExportArtifacts([]);
+        setReport(null);
+        setCitationCheck(null);
+      }
+      await refreshCases();
+    }, "Case deleted from the active work queue.");
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -674,7 +721,7 @@ export function PriorAuthWorkspace() {
             <div>
               <h1 className="text-lg font-semibold leading-6">PriorAuth Evidence Copilot</h1>
               <p className="text-sm text-[var(--muted)]">
-                {user.organization.name} / {user.role.replace("_", " ")}
+                {user.organization.name} / {formatStatusLabel(user.role)}
               </p>
             </div>
           </div>
@@ -707,11 +754,11 @@ export function PriorAuthWorkspace() {
             <PanelHeader
               action={
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={handleCreateCase}>
+                  <Button disabled={!canManageCases} onClick={handleCreateCase}>
                     <Plus aria-hidden className="h-4 w-4" />
                     Case
                   </Button>
-                  <Button onClick={handleCreateAppealCase} variant="secondary">
+                  <Button disabled={!canManageCases} onClick={handleCreateAppealCase} variant="secondary">
                     <Plus aria-hidden className="h-4 w-4" />
                     Appeal
                   </Button>
@@ -729,26 +776,38 @@ export function PriorAuthWorkspace() {
                 </div>
               ) : (
                 cases.map((caseItem) => (
-                  <button
+                  <div
                     className={`rounded-md border p-3 text-left transition ${
                       selectedCase?.id === caseItem.id
                         ? "border-[var(--accent)] bg-[#eef9f7]"
                         : "border-[var(--border)] bg-white hover:bg-[#f8fbf9]"
                     }`}
                     key={caseItem.id}
-                    onClick={() => setSelectedCaseId(caseItem.id)}
-                    type="button"
                   >
-                    <span className="mb-2 flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-semibold">{caseItem.patient_label}</span>
-                      <StatusPill tone={statusTone(caseItem.status)}>{caseItem.status}</StatusPill>
-                    </span>
-                    <span className="block text-sm text-[var(--muted)]">{caseItem.requested_service}</span>
-                    <span className="mt-2 grid grid-cols-2 gap-2 text-xs text-[var(--muted)]">
-                      <span>{caseItem.payer_name}</span>
-                      <span>{caseItem.readiness_score ?? "No"} score</span>
-                    </span>
-                  </button>
+                    <button className="block w-full text-left" onClick={() => setSelectedCaseId(caseItem.id)} type="button">
+                      <span className="mb-2 flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-semibold">{caseItem.patient_label}</span>
+                        <StatusPill tone={statusTone(caseItem.status)}>{formatStatusLabel(caseItem.status)}</StatusPill>
+                      </span>
+                      <span className="block text-sm text-[var(--muted)]">{caseItem.requested_service}</span>
+                      <span className="mt-2 grid grid-cols-1 gap-1 text-xs text-[var(--muted)] sm:grid-cols-2">
+                        <span>{caseItem.payer_name}</span>
+                        <span>{formatScoreLabel(caseItem.readiness_score)}</span>
+                      </span>
+                    </button>
+                    {canManageCases ? (
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-[#e4c7c4] bg-white px-2.5 text-xs font-semibold text-[var(--danger)] hover:bg-[#fff1f0]"
+                          onClick={(event) => handleArchiveCase(caseItem, event)}
+                          type="button"
+                        >
+                          <Trash2 aria-hidden className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 ))
               )}
             </div>
@@ -759,7 +818,7 @@ export function PriorAuthWorkspace() {
               <PanelHeader
                 action={
                   selectedCase ? (
-                    <StatusPill tone={statusTone(selectedCase.status)}>{selectedCase.status}</StatusPill>
+                    <StatusPill tone={statusTone(selectedCase.status)}>{formatStatusLabel(selectedCase.status)}</StatusPill>
                   ) : undefined
                 }
                 id="case-heading"
@@ -818,9 +877,13 @@ export function PriorAuthWorkspace() {
                         {documents.map((document) => (
                           <tr className="border-b border-[var(--border)]" key={document.id}>
                             <td className="py-3 pr-3 font-medium">{document.file_name}</td>
-                            <td className="py-3 pr-3">{document.document_type}</td>
+                            <td className="py-3 pr-3">{formatDocumentTypeLabel(document.document_type)}</td>
                             <td className="py-3 pr-3">{document.page_count ?? "Pending"}</td>
-                            <td className="py-3 pr-3"><StatusPill tone={statusTone(document.processing_status)}>{document.processing_status}</StatusPill></td>
+                            <td className="py-3 pr-3">
+                              <StatusPill tone={statusTone(document.processing_status)}>
+                                {formatStatusLabel(document.processing_status)}
+                              </StatusPill>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -841,7 +904,7 @@ export function PriorAuthWorkspace() {
                         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-semibold">{criterion.criterion_code}</span>
-                            <StatusPill tone={statusTone(criterion.reviewer_status)}>{criterion.reviewer_status}</StatusPill>
+                            <StatusPill tone={statusTone(criterion.reviewer_status)}>{formatStatusLabel(criterion.reviewer_status)}</StatusPill>
                           </div>
                           <span className="text-xs text-[var(--muted)]">{criterion.source_file}, page {criterion.source_page}</span>
                         </div>
@@ -881,7 +944,7 @@ export function PriorAuthWorkspace() {
                             </Button>
                           </div>
                         </div>
-                        <blockquote className="mt-3 rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--muted)]">
+                        <blockquote className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--muted)]">
                           {criterion.source_quote}
                         </blockquote>
                       </div>
@@ -908,13 +971,13 @@ export function PriorAuthWorkspace() {
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                           <div className="flex flex-col gap-3">
                             <div className="flex flex-wrap items-center gap-2">
-                              <StatusPill tone={statusTone(effectiveStatus)}>{effectiveStatus}</StatusPill>
+                              <StatusPill tone={statusTone(effectiveStatus)}>{formatStatusLabel(effectiveStatus)}</StatusPill>
                               {match.reviewer_override_status ? (
                                 <span className="text-xs font-semibold text-[var(--muted)]">Reviewer override</span>
                               ) : null}
                             </div>
                             <p className="text-sm leading-6">{match.evidence_summary}</p>
-                            <blockquote className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--muted)]">
+                            <blockquote className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--muted)]">
                               {match.source_quote || "No source quote"} {match.source_file ? `(${match.source_file}, page ${match.source_page})` : ""}
                             </blockquote>
                             <p className="text-sm leading-6 text-[var(--muted)]">{match.recommended_action}</p>
@@ -1011,7 +1074,7 @@ export function PriorAuthWorkspace() {
                     <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <h3 className="text-sm font-semibold">Exports</h3>
-                        <p className="mt-1 text-sm text-[var(--muted)]">Markdown artifacts are generated after review gates pass.</p>
+                        <p className="mt-1 text-sm text-[var(--muted)]">PDF artifacts are generated after review gates pass.</p>
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row">
                         <Button disabled={!selectedCase || selectedCase.readiness_score == null} onClick={() => handleCreateExport("readiness")} variant="secondary">
@@ -1050,8 +1113,8 @@ export function PriorAuthWorkspace() {
                       <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb]" key={draft.id}>
                         <div className="flex flex-col gap-3 border-b border-[var(--border)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                           <div className="flex flex-wrap items-center gap-2">
-                            <StatusPill tone={statusTone(draft.status)}>{draft.status}</StatusPill>
-                            <span className="text-xs font-semibold text-[var(--muted)]">{draft.letter_type}</span>
+                            <StatusPill tone={statusTone(draft.status)}>{formatStatusLabel(draft.status)}</StatusPill>
+                            <span className="text-xs font-semibold text-[var(--muted)]">{formatCaseTypeLabel(draft.letter_type)}</span>
                           </div>
                           <div className="flex flex-col gap-2 sm:flex-row">
                             <Button onClick={() => handleSaveDraftEdits(draft)} variant="secondary">
@@ -1072,7 +1135,7 @@ export function PriorAuthWorkspace() {
                           <label className="flex flex-col gap-2 text-sm font-semibold">
                             Draft content
                             <textarea
-                              className="min-h-[360px] resize-y rounded-md border border-[var(--border)] bg-white px-3 py-3 font-mono text-sm font-normal leading-7 outline-none focus:border-[var(--accent)]"
+                              className="min-h-[520px] resize-y rounded-md border border-[var(--border)] bg-white px-3 py-3 font-mono text-sm font-normal leading-7 outline-none focus:border-[var(--accent)]"
                               onChange={(event) =>
                                 setDraftEdits((current) => ({ ...current, [draft.id]: event.target.value }))
                               }
@@ -1083,7 +1146,7 @@ export function PriorAuthWorkspace() {
                             {activeCitationCheck ? (
                               <>
                                 <StatusPill tone={statusTone(activeCitationCheck.verification_status)}>
-                                  {activeCitationCheck.verification_status}
+                                  {formatStatusLabel(activeCitationCheck.verification_status)}
                                 </StatusPill>
                                 <div className="mt-4 flex flex-col gap-4">
                                   <div>

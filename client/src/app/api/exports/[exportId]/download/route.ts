@@ -37,11 +37,11 @@ export async function GET(request: Request, context: RouteContext) {
       return errorResponse(error.error, error.status);
     }
 
-    return new Response(await backendResponse.text(), {
+    return new Response(await backendResponse.arrayBuffer(), {
       status: 200,
       headers: {
-        "Content-Type": backendResponse.headers.get("content-type") ?? "text/markdown",
-        "Content-Disposition": backendResponse.headers.get("content-disposition") ?? 'attachment; filename="authlens-export.md"',
+        "Content-Type": backendResponse.headers.get("content-type") ?? "application/pdf",
+        "Content-Disposition": backendResponse.headers.get("content-disposition") ?? 'attachment; filename="authlens-export.pdf"',
         "X-Content-Type-Options": backendResponse.headers.get("x-content-type-options") ?? "nosniff",
       }
     });

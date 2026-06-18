@@ -210,6 +210,8 @@ class ExportWorkflowTests(unittest.TestCase):
         self.assertEqual(export_response.status_code, 201, export_response.text)
         payload = export_response.json()
         self.assertEqual(payload["export_type"], "readiness_report")
+        self.assertTrue(payload["file_name"].endswith("-readiness-report.pdf"))
+        self.assertEqual(payload["mime_type"], "application/pdf")
         self.assertIn("documentation completeness", payload["content_markdown"])
         self.assertEqual(payload["manifest_json"]["synthetic_only"], True)
 
@@ -248,8 +250,12 @@ class ExportWorkflowTests(unittest.TestCase):
         self.assertIn("Clinician review is required", letter_response.json()["content_markdown"])
         self.assertNotIn("guaranteed approval", letter_response.json()["content_markdown"].lower())
         self.assertEqual(packet_response.status_code, 201, packet_response.text)
+        self.assertTrue(letter_response.json()["file_name"].endswith("-prior-auth-letter.pdf"))
+        self.assertEqual(letter_response.json()["mime_type"], "application/pdf")
         packet = packet_response.json()
         self.assertEqual(packet["export_type"], "packet")
+        self.assertTrue(packet["file_name"].endswith("-prior-auth-packet.pdf"))
+        self.assertEqual(packet["mime_type"], "application/pdf")
         self.assertGreaterEqual(len(packet["manifest_json"]["documents"]), 2)
         self.assertGreaterEqual(len(packet["manifest_json"]["citations"]), 1)
         self.assertIn("policy.pdf", packet["content_markdown"])
@@ -288,10 +294,12 @@ class ExportWorkflowTests(unittest.TestCase):
             headers={"Authorization": f"Bearer {coordinator_token}"},
         )
         self.assertEqual(download_response.status_code, 200, download_response.text)
-        self.assertIn("text/markdown", download_response.headers["content-type"])
+        self.assertIn("application/pdf", download_response.headers["content-type"])
         self.assertIn("attachment", download_response.headers["content-disposition"])
+        self.assertIn(".pdf", download_response.headers["content-disposition"])
         self.assertEqual(download_response.headers["x-content-type-options"], "nosniff")
-        self.assertIn("Synthetic/de-identified use only", download_response.text)
+        self.assertTrue(download_response.content.startswith(b"%PDF-"))
+        self.assertIn(b"Synthetic/de-identified use only", download_response.content)
 
         cross_org_response = client.get(
             f"/api/exports/{export_id}/download",

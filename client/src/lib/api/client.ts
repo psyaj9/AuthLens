@@ -186,6 +186,13 @@ export async function createCase(payload: {
   return parseLocalRouteResponse(response, caseSchema);
 }
 
+export async function archiveCase(caseId: string): Promise<CaseSummary> {
+  const response = await fetch(`/api/cases/${caseId}/archive`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, caseSchema);
+}
+
 export async function listCaseDocuments(caseId: string): Promise<CaseDocument[]> {
   const response = await fetch(`/api/cases/${caseId}/documents`, {
     cache: "no-store"

@@ -37,7 +37,7 @@ Implemented:
 - Appeal draft generation from denial-letter uploads, including denial-reason citations and appeal-case checks.
 - Next.js workspace with account flows, case list, prior-auth and appeal case creation, case detail workflow, typed upload, criteria/evidence/readiness/draft views, export controls, and backend proxy routes.
 - Synthetic golden-case fixture runner and cross-tenant direct-ID regression tests.
-- Readiness, letter, and packet markdown exports with persisted manifests and download routes.
+- Readiness, letter, and packet PDF exports with persisted manifests and download routes.
 - Structured LLM gateway foundation with Pydantic output schemas, opt-in criteria extraction, evidence matching, readiness reporting, redacted failed `AnalysisRun` recording, and untrusted-document prompt framing.
 - Legacy `/api/upload_pdf/` and `/api/queries/` routes for the original PDF Q&A flow.
 
@@ -397,7 +397,7 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 
 1. Phase 0 - Implemented: executable eval and tenant-isolation guardrails.
 2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
-3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
+3. Phase 2 - Implemented: readiness, letter, and packet exports with PDF downloads and packet manifests.
 4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
 5. Phase 4 - In progress: structured Groq provider boundary, opt-in criteria/evidence/readiness branches, expanded eval scoring, and the 12-case synthetic gate are implemented; larger PRD eval dataset growth remains.
 6. Phase 5 - In progress: password-reset session invalidation, production reset delivery, synthetic eval CI, dependency-audit CI, Codex Security scan fixes, and deployment smoke scripting are implemented; final release verification remains.

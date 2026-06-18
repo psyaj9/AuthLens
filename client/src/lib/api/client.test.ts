@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   approveDraft,
+  archiveCase,
   askQuestion,
   AuthLensApiError,
   createAppealDraft,
@@ -250,6 +251,36 @@ describe("client API client", () => {
     );
   });
 
+  it("archives cases through the local case route", async () => {
+    const archivedCase = {
+      id: "case_123",
+      patient_label: "SYN-LMRI-001",
+      payer_name: "Example Health Plan",
+      plan_name: null,
+      specialty: "Radiology",
+      requested_service: "Lumbar spine MRI",
+      service_code: "72148",
+      diagnosis_summary: null,
+      case_type: "prior_auth",
+      status: "archived",
+      readiness_score: 12,
+      missing_required_criteria_count: 6,
+      assigned_to_user_id: null,
+      created_at: "2026-06-18T00:00:00Z",
+      updated_at: "2026-06-18T00:00:00Z"
+    };
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(archivedCase));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await archiveCase("case_123");
+
+    expect(result.status).toBe("archived");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/cases/case_123/archive",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("updates criteria review state through the local route", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({
@@ -400,8 +431,8 @@ describe("client API client", () => {
       case_id: "case_123",
       export_type: "packet",
       status: "ready",
-      file_name: "syn-lmri-packet.md",
-      mime_type: "text/markdown",
+      file_name: "syn-lmri-packet.pdf",
+      mime_type: "application/pdf",
       content_markdown: "# Packet",
       manifest_json: { synthetic_only: true },
       created_at: "2026-06-18T00:00:00Z"
@@ -418,6 +449,8 @@ describe("client API client", () => {
     const packet = await createPacketExport("case_123");
 
     expect(packet.export_type).toBe("packet");
+    expect(packet.file_name).toBe("syn-lmri-packet.pdf");
+    expect(packet.mime_type).toBe("application/pdf");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "/api/cases/case_123/exports/readiness-report",

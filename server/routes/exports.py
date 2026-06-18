@@ -10,6 +10,7 @@ from services.exports import (
     create_packet_export,
     create_readiness_export,
     get_export,
+    render_export_pdf,
 )
 from services.audit import log_audit_event
 
@@ -94,8 +95,13 @@ async def download_export(
         metadata={"export_type": artifact.export_type, "file_name": artifact.file_name},
     )
     db.commit()
+    content = (
+        render_export_pdf(artifact.content_markdown)
+        if artifact.mime_type == "application/pdf"
+        else artifact.content_markdown
+    )
     return Response(
-        content=artifact.content_markdown,
+        content=content,
         media_type=artifact.mime_type,
         headers={
             "Content-Disposition": f'attachment; filename="{artifact.file_name}"',

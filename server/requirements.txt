@@ -13,6 +13,7 @@ pinecone
 langchain-google-genai
 
 PyPDF
+reportlab
 
 python-dotenv
 
