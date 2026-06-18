@@ -1,5 +1,18 @@
 # Next PRD Implementation Phases
 
+## Production Auth Token Parse Bug
+
+- [x] Trace the production `/api/auth/register` and `/api/auth/login` response flow through the Next proxy and FastAPI route.
+- [x] Add focused regression tests for successful browser auth responses that intentionally omit `access_token` and `token_type` from JSON.
+- [x] Apply the smallest root-cause fix at the failing boundary.
+- [x] Verify focused client auth proxy tests and relevant backend auth tests.
+
+## Review
+
+- Root cause: the FastAPI backend returns `access_token` / `token_type`, but the Next auth proxy intentionally strips the bearer token from browser JSON and stores it in an HTTP-only cookie. The client API helper was still parsing login/register responses with the backend token schema, causing the production Zod error after successful 200/201 auth responses.
+- Fixed `loginUser` and `registerUser` to parse the browser-facing auth contract `{ user }` while preserving the backend token schema and secure cookie route behavior.
+- Verification passed: red client regression reproduced the production missing-token Zod error; focused auth proxy/client tests passed 14 tests; client typecheck passed; client full Vitest passed 52 tests; client lint passed; backend unittest discovery passed 121 tests.
+
 ## Current Remaining Phase 4/5 Launch Gates
 
 - [x] Re-read `README.md`, `priorauth_evidence_copilot_prd.md`, `tasks/todo.md`, and `docs/superpowers/plans/2026-06-18-next-prd-phases.md` to identify the true remaining work after the completed MVP slices.

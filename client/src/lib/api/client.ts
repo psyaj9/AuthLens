@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  authResponseSchema,
   caseListSchema,
   caseSchema,
   citationCheckSchema,
@@ -32,10 +31,13 @@ const qaResponseSchema = z.object({
 });
 
 const uploadResponseSchema = z.record(z.string(), z.unknown());
+const browserAuthResponseSchema = z.object({
+  user: userProfileSchema
+});
 
 export type QaClientResponse = z.infer<typeof qaResponseSchema>;
 export type UploadClientResponse = z.infer<typeof uploadResponseSchema>;
-export type LoginResponse = z.infer<typeof authResponseSchema>;
+export type LoginResponse = z.infer<typeof browserAuthResponseSchema>;
 export type RegisterPayload = {
   email: string;
   password: string;
@@ -123,7 +125,7 @@ export async function loginUser(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password })
   });
-  return parseLocalRouteResponse(response, authResponseSchema);
+  return parseLocalRouteResponse(response, browserAuthResponseSchema);
 }
 
 export async function registerUser(payload: RegisterPayload): Promise<LoginResponse> {
@@ -132,7 +134,7 @@ export async function registerUser(payload: RegisterPayload): Promise<LoginRespo
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });
-  return parseLocalRouteResponse(response, authResponseSchema);
+  return parseLocalRouteResponse(response, browserAuthResponseSchema);
 }
 
 export async function forgotPassword(email: string) {

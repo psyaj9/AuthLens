@@ -10,6 +10,7 @@ import {
   createPriorAuthDraft,
   createReadinessExport,
   forgotPassword,
+  loginUser,
   overrideEvidenceMatch,
   registerUser,
   resetPassword,
@@ -75,11 +76,39 @@ describe("client API client", () => {
     expect(AuthLensApiError).toBeDefined();
   });
 
-  it("registers users through the local auth route", async () => {
+  it("logs in through the local auth route without expecting bearer tokens in JSON", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({
-        access_token: "jwt",
-        token_type: "bearer",
+        user: {
+          id: "user_1",
+          email: "owner@example.test",
+          name: "Owner",
+          role: "admin",
+          organization: { id: "org_1", name: "Practice", plan: "self_service" }
+        }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await loginUser("owner@example.test", "registered-password");
+
+    expect(result.user.email).toBe("owner@example.test");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "owner@example.test",
+          password: "registered-password"
+        })
+      })
+    );
+  });
+
+  it("registers users through the local auth route without expecting bearer tokens in JSON", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
         user: {
           id: "user_1",
           email: "owner@example.test",
