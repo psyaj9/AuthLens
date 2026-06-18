@@ -40,6 +40,12 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertIn("email", readme)
         self.assertIn("external", readme)
 
+    def test_circleci_runs_synthetic_eval_gate(self):
+        circleci_config = (PROJECT_ROOT / ".circleci" / "config.yml").read_text(encoding="utf-8")
+
+        self.assertIn("Run synthetic eval smoke gate", circleci_config)
+        self.assertIn("python server/evals/run_synthetic_eval.py", circleci_config)
+
 
 if __name__ == "__main__":
     unittest.main()

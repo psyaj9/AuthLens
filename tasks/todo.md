@@ -54,6 +54,19 @@
   - [x] Update README and task tracker for reset-driven session invalidation.
   - [x] Verify focused auth tests and migration smoke.
 - Phase 5 auth/session verification passed: password-reset access-token invalidation and adjacent reset tests passed 3 tests, deployment/auth focused verification passed 5 tests, Alembic upgrade smoke reached `20260618_0004` on a fresh temporary SQLite database, and backend unittest discovery passed 100 tests.
+- Current Phase 5 production reset-delivery slice:
+  - [x] Add production fail-closed behavior when `PASSWORD_RESET_DELIVERY_MODE` is unset.
+  - [x] Reject invalid production reset-delivery modes without creating reset-token rows.
+  - [x] Keep configured production reset requests from exposing raw reset tokens.
+  - [x] Document `PASSWORD_RESET_DELIVERY_MODE` in `.env.example`, `render.yaml`, and `README.md`.
+  - [x] Verify focused auth/deployment tests and full backend discovery.
+- Phase 5 production reset-delivery verification passed: production reset-delivery tests passed 3 tests, focused auth/deployment verification passed 11 tests, and backend unittest discovery passed 104 tests.
+- Current Phase 5 CI eval-gate slice:
+  - [x] Add a deployment-config regression requiring CircleCI to run the synthetic eval smoke gate.
+  - [x] Add `Run synthetic eval smoke gate` to the CircleCI backend job.
+  - [x] Update README CI docs to include the explicit eval command.
+  - [x] Verify the focused deployment-config test and direct eval command.
+- Phase 5 CI eval-gate verification passed: `tests.test_deployment_config.DeploymentConfigTests.test_circleci_runs_synthetic_eval_gate` passed, `.venv\Scripts\python.exe server\evals\run_synthetic_eval.py` passed 3/3 synthetic cases with no failed cases, and backend unittest discovery passed 105 tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.
