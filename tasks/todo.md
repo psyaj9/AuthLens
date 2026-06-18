@@ -7,7 +7,7 @@
 - [x] Run parallel read-only subagent reconnaissance for README/PRD/todo state, novelty-doc implications, and security scan seed surfaces.
 - [x] Save the next implementation plan at `docs/superpowers/plans/2026-06-18-authlens-remaining-launch-gates.md`.
 - [x] Run the real Codex Security repository scan with scoped emphasis on auth/session, cross-tenant direct IDs, exports/downloads, prompt injection, and upload handling.
-- [ ] Fix validated Codex Security findings in severity order, with regression tests and scan-report receipts.
+- [x] Fix validated Codex Security findings in severity order, with regression tests and scan-report receipts.
 - [ ] Add executable live deployment smoke gates for the Render backend and Vercel client.
 - [ ] Expand the synthetic eval dataset beyond the 3-case smoke set toward the PRD target coverage.
 - [ ] Add a real password reset delivery path before enabling production forgot-password with `PASSWORD_RESET_DELIVERY_MODE=email` or `PASSWORD_RESET_DELIVERY_MODE=external`.
@@ -24,6 +24,7 @@
 - Password reset delivery should add a delivery adapter, likely SMTP for `email` mode and a webhook handoff for `external` mode, and must not commit usable reset tokens if delivery fails.
 - Codex Security scan bundle: `C:\tmp\codex-security-scans\AuthLens\d35c87ce_20260618-154542\report.md` and `report.html`.
 - Validated scan findings to fix first: legacy Q&A unscoped Pinecone/public proxy exposure (`AL-001`, high), auth/reset attempt throttling (`AL-002`, medium), browser auth proxy token exposure (`AL-003`, medium), and PDF parser/indexing resource limits (`AL-004`, medium).
+- Security fix receipt: `C:\tmp\codex-security-scans\AuthLens\d35c87ce_20260618-154542\artifacts\fix_report.md`.
 
 - [x] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
 - [x] Execute Phase 1: reviewer workspace completion.

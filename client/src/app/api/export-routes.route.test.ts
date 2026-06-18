@@ -99,7 +99,8 @@ describe("export proxy routes", () => {
       new Response("# Packet", {
         headers: {
           "content-type": "text/markdown; charset=utf-8",
-          "content-disposition": 'attachment; filename="packet.md"'
+          "content-disposition": 'attachment; filename="packet.md"',
+          "x-content-type-options": "nosniff"
         }
       })
     );
@@ -113,6 +114,7 @@ describe("export proxy routes", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
     expect(response.headers.get("content-disposition")).toBe('attachment; filename="packet.md"');
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     await expect(response.text()).resolves.toBe("# Packet");
     expect(fetchMock).toHaveBeenCalledWith(
       "https://backend.example.test/api/exports/export_123/download",

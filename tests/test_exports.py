@@ -290,6 +290,7 @@ class ExportWorkflowTests(unittest.TestCase):
         self.assertEqual(download_response.status_code, 200, download_response.text)
         self.assertIn("text/markdown", download_response.headers["content-type"])
         self.assertIn("attachment", download_response.headers["content-disposition"])
+        self.assertEqual(download_response.headers["x-content-type-options"], "nosniff")
         self.assertIn("Synthetic/de-identified use only", download_response.text)
 
         cross_org_response = client.get(

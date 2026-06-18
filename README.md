@@ -241,6 +241,12 @@ Backend variables:
 | `PASSWORD_RESET_DELIVERY_MODE` | Production for forgot-password | Set to `email` or `external` before enabling forgot-password in production. If unset, production reset requests fail closed with 503 and no reset token is created. Non-production keeps returning a reset token for local testing. |
 | `MAX_UPLOAD_MB` | No | Upload size limit in megabytes. |
 | `MAX_UPLOAD_FILES` | No | Maximum uploaded files per request. |
+| `MAX_PDF_PAGES` | No | Maximum pages accepted from a parsed PDF before indexing; defaults to `25`. |
+| `MAX_EXTRACTED_CHARS` | No | Maximum extracted PDF text characters before indexing; defaults to `200000`. |
+| `MAX_DOCUMENT_CHUNKS` | No | Maximum chunks generated before vector upsert; defaults to `500`. |
+| `AUTH_RATE_LIMIT_MAX_ATTEMPTS` | No | Maximum failed auth/reset attempts per limiter key before `429`; defaults to `5`. |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | No | Rolling auth/reset limiter window in seconds; defaults to `300`. |
+| `ENABLE_LEGACY_QA` | No | Legacy PDF Q&A upload/query routes are disabled by default in production. Set to `true` only for a deliberate compatibility/debug window. |
 | `ENVIRONMENT` | No | Use `local`, `preview`, `test`, or `production`. |
 | `PRIORAUTH_ANALYSIS_MODE` | No | Defaults to deterministic analysis. Set to `llm` only for structured-output experiments. |
 | `PRIORAUTH_LLM_MODEL` | No | Groq model for structured prior-auth analysis; falls back to `GROQ_MODEL`, then `llama-3.1-8b-instant`. |
@@ -270,6 +276,8 @@ Use a managed Postgres `DATABASE_URL` for deployed environments. Keep SQLite for
 
 Set `PASSWORD_RESET_DELIVERY_MODE=email` when a real email provider sends reset links, or `PASSWORD_RESET_DELIVERY_MODE=external` when an external operational process handles reset delivery. Leave it unset in production only if forgot-password should fail closed.
 
+Keep `ENABLE_LEGACY_QA=false` in production unless you intentionally need the original PDF Q&A demo routes. The prior-auth workspace uses case-scoped document upload and organization-scoped retrieval; the legacy Q&A route is compatibility/debug-only.
+
 ### Client On Vercel
 
 Create a separate Vercel project for `client/` and set the project root to `client`.
@@ -278,6 +286,7 @@ Required values:
 
 - `BACKEND_API_URL` as the Render backend base URL.
 - `INTERNAL_API_TOKEN` if the backend requires it.
+- `ENABLE_LEGACY_QA=false` for production unless a short-lived compatibility/debug window intentionally enables the legacy PDF Q&A proxy routes.
 
 Set `ALLOWED_ORIGINS` on Render to the Vercel production domain and any preview/local origins you intentionally support.
 

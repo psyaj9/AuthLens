@@ -42,6 +42,7 @@ export async function GET(request: Request, context: RouteContext) {
       headers: {
         "Content-Type": backendResponse.headers.get("content-type") ?? "text/markdown",
         "Content-Disposition": backendResponse.headers.get("content-disposition") ?? 'attachment; filename="authlens-export.md"',
+        "X-Content-Type-Options": backendResponse.headers.get("x-content-type-options") ?? "nosniff",
       }
     });
   } catch {

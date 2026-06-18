@@ -90,6 +90,21 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertLess(client_job.index("name: Install client dependencies"), client_job.index(audit_step))
         self.assertLess(client_job.index(audit_step), client_job.index("name: Lint client"))
 
+    def test_live_deployment_smoke_gate_is_scripted_and_optional_in_circleci(self):
+        self.assertTrue((PROJECT_ROOT / "scripts" / "deployment_smoke.py").exists())
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        circleci_config = (PROJECT_ROOT / ".circleci" / "config.yml").read_text(encoding="utf-8")
+        backend_job = circleci_config[
+            circleci_config.index("  backend-test:") : circleci_config.index("\n  client-test-build:")
+        ]
+
+        self.assertIn("AUTHLENS_RENDER_BACKEND_URL", readme)
+        self.assertIn("AUTHLENS_VERCEL_CLIENT_URL", readme)
+        self.assertIn("name: Run live deployment smoke gate when configured", backend_job)
+        self.assertIn("python scripts/deployment_smoke.py", backend_job)
+        self.assertIn("Skipping deployment smoke: live deployment URLs are not configured.", backend_job)
+        self.assertLess(backend_job.index("name: Validate Alembic migrations"), backend_job.index("name: Run live deployment smoke gate when configured"))
+
 
 if __name__ == "__main__":
     unittest.main()

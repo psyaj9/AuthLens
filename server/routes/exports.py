@@ -97,5 +97,8 @@ async def download_export(
     return Response(
         content=artifact.content_markdown,
         media_type=artifact.mime_type,
-        headers={"Content-Disposition": f'attachment; filename="{artifact.file_name}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{artifact.file_name}"',
+            "X-Content-Type-Options": "nosniff",
+        },
     )
