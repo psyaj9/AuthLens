@@ -150,7 +150,12 @@ def extract_criteria(db: Session, *, case_id: str, organization_id: str, user_id
     if not candidates:
         candidates = [(policy_chunks[0], policy_chunks[0].text or "Policy criteria were not clearly stated.")]
 
-    db.execute(delete(PolicyCriterion).where(PolicyCriterion.case_id == case.id))
+    db.execute(
+        delete(PolicyCriterion).where(
+            PolicyCriterion.case_id == case.id,
+            PolicyCriterion.organization_id == organization_id,
+        )
+    )
     criteria: list[PolicyCriterion] = []
     for index, (chunk, sentence) in enumerate(candidates[:8], start=1):
         document = _document(db, chunk.document_id)
@@ -263,7 +268,12 @@ def match_evidence(db: Session, *, case_id: str, organization_id: str, user_id: 
     )
     db.add(run)
     db.flush()
-    db.execute(delete(EvidenceMatch).where(EvidenceMatch.case_id == case.id))
+    db.execute(
+        delete(EvidenceMatch).where(
+            EvidenceMatch.case_id == case.id,
+            EvidenceMatch.organization_id == organization_id,
+        )
+    )
 
     matches: list[EvidenceMatch] = []
     for criterion in criteria:

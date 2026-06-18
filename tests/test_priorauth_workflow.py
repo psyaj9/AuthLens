@@ -663,6 +663,141 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(payload["reviewer_status"], "reviewed")
         self.assertEqual(payload["source_file"], criterion["source_file"])
 
+    def test_case_summary_ignores_mismatched_child_row_tenants(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id, _criteria, _matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
+        before_response = client.get(
+            f"/api/cases/{case_id}",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(before_response.status_code, 200, before_response.text)
+        before_missing_count = before_response.json()["missing_required_criteria_count"]
+
+        self._create_test_user(
+            email="other-admin@test.authlens.local",
+            password="test-password",
+            role="admin",
+            organization_id="org_other_spine",
+            organization_name="Other Spine Clinic",
+        )
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        with session.SessionLocal() as db:
+            db.add(
+                models.PolicyCriterion(
+                    organization_id="org_other_spine",
+                    case_id=case_id,
+                    criterion_code="ROGUE",
+                    criterion_type="documentation",
+                    requirement="Rogue cross-tenant criterion should never affect this case summary.",
+                    required_evidence=["Cross-tenant evidence"],
+                    is_required=True,
+                    source_file="rogue-policy.pdf",
+                    source_page="1",
+                    source_quote="Rogue requirement",
+                    confidence=0.1,
+                    ambiguity_notes=[],
+                )
+            )
+            db.commit()
+
+        after_response = client.get(
+            f"/api/cases/{case_id}",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+
+        self.assertEqual(after_response.status_code, 200, after_response.text)
+        self.assertEqual(after_response.json()["missing_required_criteria_count"], before_missing_count)
+
+    def test_cross_tenant_direct_id_routes_are_denied(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        self._create_test_user(
+            email="other-admin@test.authlens.local",
+            password="test-password",
+            role="admin",
+            organization_id="org_other_spine",
+            organization_name="Other Spine Clinic",
+        )
+        other_org_token = self._login(client, email="other-admin@test.authlens.local")
+        case_id, criteria, matches = self._prepare_case_with_policy_and_note(client, coordinator_token)
+
+        documents_response = client.get(
+            f"/api/cases/{case_id}/documents",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(documents_response.status_code, 200, documents_response.text)
+        document_id = documents_response.json()["documents"][0]["id"]
+
+        draft_response = client.post(
+            f"/api/cases/{case_id}/drafts/prior-auth",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(draft_response.status_code, 200, draft_response.text)
+        draft_id = draft_response.json()["id"]
+
+        headers = {"Authorization": f"Bearer {other_org_token}"}
+        denied_requests = [
+            ("get case", lambda: client.get(f"/api/cases/{case_id}", headers=headers)),
+            (
+                "patch case",
+                lambda: client.patch(
+                    f"/api/cases/{case_id}",
+                    headers=headers,
+                    json={"patient_label": "SYN-LMRI-CROSS-TENANT"},
+                ),
+            ),
+            ("archive case", lambda: client.post(f"/api/cases/{case_id}/archive", headers=headers)),
+            ("list documents", lambda: client.get(f"/api/cases/{case_id}/documents", headers=headers)),
+            ("get document", lambda: client.get(f"/api/documents/{document_id}", headers=headers)),
+            ("extract criteria", lambda: client.post(f"/api/cases/{case_id}/criteria/extract", headers=headers)),
+            ("list criteria", lambda: client.get(f"/api/cases/{case_id}/criteria", headers=headers)),
+            (
+                "patch criterion",
+                lambda: client.patch(
+                    f"/api/criteria/{criteria[0]['id']}",
+                    headers=headers,
+                    json={"reviewer_status": "reviewed"},
+                ),
+            ),
+            ("match evidence", lambda: client.post(f"/api/cases/{case_id}/evidence/match", headers=headers)),
+            ("list evidence", lambda: client.get(f"/api/cases/{case_id}/evidence", headers=headers)),
+            (
+                "patch evidence match",
+                lambda: client.patch(
+                    f"/api/evidence-matches/{matches[0]['id']}",
+                    headers=headers,
+                    json={
+                        "reviewer_override_status": "not_met",
+                        "reviewer_override_reason": "Cross-tenant attempt",
+                    },
+                ),
+            ),
+            ("latest readiness report", lambda: client.get(f"/api/cases/{case_id}/reports/latest", headers=headers)),
+            ("create readiness report", lambda: client.post(f"/api/cases/{case_id}/reports/readiness", headers=headers)),
+            ("create prior-auth draft", lambda: client.post(f"/api/cases/{case_id}/drafts/prior-auth", headers=headers)),
+            ("list drafts", lambda: client.get(f"/api/cases/{case_id}/drafts", headers=headers)),
+            ("deferred appeal draft", lambda: client.post(f"/api/cases/{case_id}/drafts/appeal", headers=headers)),
+            ("get draft", lambda: client.get(f"/api/drafts/{draft_id}", headers=headers)),
+            (
+                "patch draft",
+                lambda: client.patch(
+                    f"/api/drafts/{draft_id}",
+                    headers=headers,
+                    json={"content_markdown": "Cross-tenant edit attempt"},
+                ),
+            ),
+            ("verify citations", lambda: client.post(f"/api/drafts/{draft_id}/verify-citations", headers=headers)),
+            ("approve draft", lambda: client.post(f"/api/drafts/{draft_id}/approve", headers=headers)),
+            ("case audit", lambda: client.get(f"/api/cases/{case_id}/audit", headers=headers)),
+        ]
+
+        for label, request in denied_requests:
+            with self.subTest(label=label):
+                response = request()
+                self.assertEqual(response.status_code, 404, response.text)
+
     def test_case_audit_is_scoped_to_the_case_and_org_wide_audit_is_admin_only(self):
         client = self._client()
         coordinator_token = self._login(client)

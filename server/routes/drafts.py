@@ -18,6 +18,7 @@ from services.priorauth_analysis import (
     update_draft,
     verify_citations,
 )
+from routes.cases import get_case_for_user
 
 
 router = APIRouter()
@@ -66,7 +67,12 @@ async def create_prior_auth_letter(
 
 
 @router.post("/cases/{case_id}/drafts/appeal")
-async def appeal_draft_deferred():
+async def appeal_draft_deferred(
+    case_id: str,
+    current_user: CurrentUser = Depends(require_roles("admin", "coordinator")),
+    db: Session = Depends(get_db),
+):
+    get_case_for_user(db, case_id, current_user)
     raise HTTPException(status_code=501, detail="Appeal drafting is deferred from the first MVP")
 
 

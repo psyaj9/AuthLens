@@ -1,6 +1,7 @@
 import importlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -12,6 +13,7 @@ from fastapi.testclient import TestClient
 SERVER_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = SERVER_DIR.parent
 GOLDEN_CASES_PATH = SERVER_DIR / "evals" / "synthetic_golden_cases.json"
+EVAL_TMP_DIR = PROJECT_ROOT / ".authlens_tmp"
 TEST_PASSWORD = "synthetic-eval-password"
 
 
@@ -164,34 +166,40 @@ def run_smoke_eval() -> dict[str, Any]:
         "ENVIRONMENT": os.environ.get("ENVIRONMENT"),
     }
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    EVAL_TMP_DIR.mkdir(exist_ok=True)
+    tmpdir = Path(tempfile.mkdtemp(prefix="synthetic-eval-", dir=EVAL_TMP_DIR))
+    try:
+        os.chdir(SERVER_DIR)
+        if str(SERVER_DIR) not in sys.path:
+            sys.path.insert(0, str(SERVER_DIR))
+        _clear_server_modules()
+        os.environ["DATABASE_URL"] = f"sqlite:///{tmpdir / 'synthetic-eval.db'}"
+        os.environ["JWT_SECRET"] = "synthetic-eval-secret"
+        os.environ["ENVIRONMENT"] = "test"
+
+        main = importlib.import_module("main")
+        session = importlib.import_module("db.session")
+        session.init_db()
+        client = TestClient(main.app)
+
+        case_results = [_run_case(client, case) for case in payload["cases"]]
+    finally:
+        session_module = sys.modules.get("db.session")
+        if session_module is not None:
+            session_module.dispose_engine()
+        _clear_server_modules()
+        for key, value in original_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        sys.path[:] = original_path
+        os.chdir(original_cwd)
+        shutil.rmtree(tmpdir, ignore_errors=True)
         try:
-            os.chdir(SERVER_DIR)
-            if str(SERVER_DIR) not in sys.path:
-                sys.path.insert(0, str(SERVER_DIR))
-            _clear_server_modules()
-            os.environ["DATABASE_URL"] = f"sqlite:///{Path(tmpdir) / 'synthetic-eval.db'}"
-            os.environ["JWT_SECRET"] = "synthetic-eval-secret"
-            os.environ["ENVIRONMENT"] = "test"
-
-            main = importlib.import_module("main")
-            session = importlib.import_module("db.session")
-            session.init_db()
-            client = TestClient(main.app)
-
-            case_results = [_run_case(client, case) for case in payload["cases"]]
-        finally:
-            session_module = sys.modules.get("db.session")
-            if session_module is not None:
-                session_module.dispose_engine()
-            _clear_server_modules()
-            for key, value in original_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
-            sys.path[:] = original_path
-            os.chdir(original_cwd)
+            EVAL_TMP_DIR.rmdir()
+        except OSError:
+            pass
 
     failed_cases = [result["case_id"] for result in case_results if not result["passed"]]
     return {

@@ -25,3 +25,4 @@ client/tsconfig.tsbuildinfo
 .mypy_cache/
 .ruff_cache/
 .turbo/
+.authlens_tmp/

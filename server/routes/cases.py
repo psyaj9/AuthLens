@@ -15,17 +15,26 @@ router = APIRouter()
 
 
 def _missing_required_count(db: Session, case_id: str) -> int:
+    case = db.get(PriorAuthCase, case_id)
+    if case is None:
+        return 0
     criteria = list(
         db.scalars(
             select(PolicyCriterion).where(
                 PolicyCriterion.case_id == case_id,
+                PolicyCriterion.organization_id == case.organization_id,
                 PolicyCriterion.is_required.is_(True),
             )
         )
     )
     matches = {
         match.criterion_id: match
-        for match in db.scalars(select(EvidenceMatch).where(EvidenceMatch.case_id == case_id))
+        for match in db.scalars(
+            select(EvidenceMatch).where(
+                EvidenceMatch.case_id == case_id,
+                EvidenceMatch.organization_id == case.organization_id,
+            )
+        )
     }
     missing = 0
     for criterion in criteria:
