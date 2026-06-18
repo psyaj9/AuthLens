@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -494,6 +495,131 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(approve_response.status_code, 200, approve_response.text)
         self.assertEqual(approve_response.json()["status"], "approved")
+
+    def test_llm_criteria_extraction_invalid_output_fails_closed_without_criteria(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-INVALID")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        try:
+            with patch.object(
+                llm_gateway,
+                "generate_structured_output",
+                return_value='{"criteria":[{"criterion_code":"C1","confidence":1.5}]}',
+            ):
+                response = client.post(
+                    f"/api/cases/{case_id}/criteria/extract",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json(), {"error": "LLM output failed schema validation"})
+
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            runs = list(
+                db.scalars(
+                    sqlalchemy.select(models.AnalysisRun).where(
+                        models.AnalysisRun.case_id == case_id,
+                        models.AnalysisRun.run_type == "criteria_extraction",
+                    )
+                )
+            )
+            criteria = list(
+                db.scalars(sqlalchemy.select(models.PolicyCriterion).where(models.PolicyCriterion.case_id == case_id))
+            )
+
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0].status, "failed")
+        self.assertEqual(runs[0].metadata_json["schema"], "CriteriaExtractionOutput")
+        self.assertNotIn("Coverage requires", str(runs[0].metadata_json))
+        self.assertNotIn("criterion_code", str(runs[0].metadata_json))
+        self.assertEqual(criteria, [])
+
+    def test_llm_criteria_extraction_valid_output_creates_criteria_with_completed_run(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-VALID")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        raw_output = """
+        {
+          "criteria": [
+            {
+              "criterion_code": "C1",
+              "criterion_type": "documentation",
+              "requirement": "Document six weeks of conservative therapy.",
+              "required_evidence": ["Therapy dates"],
+              "is_required": true,
+              "source_quote": "Coverage requires six weeks of conservative therapy.",
+              "source_file": "policy.pdf",
+              "source_page": "1",
+              "confidence": 0.82,
+              "ambiguity_notes": []
+            }
+          ],
+          "missing_or_ambiguous_policy_info": []
+        }
+        """
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/criteria/extract",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(len(payload["criteria"]), 1)
+        self.assertEqual(payload["criteria"][0]["criterion_code"], "C1")
+        self.assertEqual(payload["criteria"][0]["source_file"], "policy.pdf")
+
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            run = db.scalar(
+                sqlalchemy.select(models.AnalysisRun).where(
+                    models.AnalysisRun.case_id == case_id,
+                    models.AnalysisRun.run_type == "criteria_extraction",
+                )
+            )
+
+        self.assertEqual(run.status, "completed")
+        self.assertEqual(run.metadata_json["schema"], "CriteriaExtractionOutput")
+        self.assertEqual(run.metadata_json["analysis_mode"], "llm")
+        self.assertEqual(run.metadata_json["criteria_count"], 1)
 
     def test_draft_edit_blocks_approval_until_citations_are_reverified(self):
         client = self._client()

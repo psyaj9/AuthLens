@@ -1,3 +1,4 @@
+import os
 import re
 from datetime import UTC, datetime
 from math import floor
@@ -18,6 +19,8 @@ from models.priorauth import (
     ReadinessReport,
 )
 from services.audit import log_audit_event
+from services import llm_gateway
+from services.analysis_schemas import CriteriaExtractionOutput
 
 
 PATIENT_DOCUMENT_TYPES = {
@@ -149,6 +152,177 @@ def _is_citation_backed_met(match: EvidenceMatch) -> bool:
     return _effective_match_status(match) == "met" and _has_required_citation(match)
 
 
+def _policy_source_text(db: Session, chunks: list[DocumentChunk]) -> str:
+    lines = []
+    for chunk in chunks:
+        document = _document(db, chunk.document_id)
+        lines.append(f"[{document.file_name}, page {chunk.page_start}]\n{chunk.text}")
+    return "\n\n".join(lines)
+
+
+def _source_document_for_criterion(
+    db: Session,
+    chunks: list[DocumentChunk],
+    *,
+    source_file: str,
+) -> Document:
+    fallback = _document(db, chunks[0].document_id)
+    for chunk in chunks:
+        document = _document(db, chunk.document_id)
+        if document.file_name == source_file:
+            return document
+    return fallback
+
+
+def _raise_structured_output_failure() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=llm_gateway.STRUCTURED_OUTPUT_ERROR,
+    )
+
+
+def _record_llm_generation_failure(
+    db: Session,
+    *,
+    organization_id: str,
+    case_id: str,
+    run_type: str,
+    model_version: str,
+    error_type: str,
+) -> None:
+    db.add(
+        AnalysisRun(
+            organization_id=organization_id,
+            case_id=case_id,
+            run_type=run_type,
+            status="failed",
+            model_version=model_version,
+            metadata_json={
+                "schema": "CriteriaExtractionOutput",
+                "error": llm_gateway.STRUCTURED_OUTPUT_ERROR,
+                "error_type": error_type,
+            },
+        )
+    )
+    db.commit()
+
+
+def _extract_criteria_with_llm(
+    db: Session,
+    *,
+    case: PriorAuthCase,
+    policy_chunks: list[DocumentChunk],
+    organization_id: str,
+    user_id: str,
+) -> list[PolicyCriterion]:
+    model_version = os.getenv("PRIORAUTH_LLM_MODEL", "structured-llm")
+    prompt = llm_gateway.build_structured_prompt(
+        task="Extract payer policy criteria for a prior authorization evidence checklist.",
+        schema_name=CriteriaExtractionOutput.__name__,
+        source_text=_policy_source_text(db, policy_chunks),
+    )
+    try:
+        raw_output = llm_gateway.generate_structured_output(prompt)
+        output = llm_gateway.parse_structured_output_with_run(
+            db,
+            CriteriaExtractionOutput,
+            raw_output,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="criteria_extraction",
+            model_version=model_version,
+        )
+    except llm_gateway.StructuredOutputError as exc:
+        if not db.scalar(
+            select(AnalysisRun).where(
+                AnalysisRun.case_id == case.id,
+                AnalysisRun.organization_id == organization_id,
+                AnalysisRun.run_type == "criteria_extraction",
+                AnalysisRun.status == "failed",
+            )
+        ):
+            _record_llm_generation_failure(
+                db,
+                organization_id=organization_id,
+                case_id=case.id,
+                run_type="criteria_extraction",
+                model_version=model_version,
+                error_type=type(exc).__name__,
+            )
+        _raise_structured_output_failure()
+
+    run = db.scalar(
+        select(AnalysisRun)
+        .where(
+            AnalysisRun.case_id == case.id,
+            AnalysisRun.organization_id == organization_id,
+            AnalysisRun.run_type == "criteria_extraction",
+            AnalysisRun.status == "completed",
+        )
+        .order_by(AnalysisRun.created_at.desc())
+    )
+    if run is None:
+        _record_llm_generation_failure(
+            db,
+            organization_id=organization_id,
+            case_id=case.id,
+            run_type="criteria_extraction",
+            model_version=model_version,
+            error_type="MissingAnalysisRun",
+        )
+        _raise_structured_output_failure()
+    run.metadata_json = {
+        **(run.metadata_json or {}),
+        "analysis_mode": "llm",
+        "criteria_count": len(output.criteria),
+    }
+
+    db.execute(
+        delete(PolicyCriterion).where(
+            PolicyCriterion.case_id == case.id,
+            PolicyCriterion.organization_id == organization_id,
+        )
+    )
+    criteria = []
+    for index, item in enumerate(output.criteria, start=1):
+        document = _source_document_for_criterion(db, policy_chunks, source_file=item.source_file)
+        criterion = PolicyCriterion(
+            organization_id=organization_id,
+            case_id=case.id,
+            analysis_run_id=run.id,
+            criterion_code=item.criterion_code or f"C{index}",
+            criterion_type=item.criterion_type,
+            requirement=item.requirement,
+            required_evidence=item.required_evidence,
+            is_required=item.is_required,
+            source_document_id=document.id,
+            source_file=document.file_name,
+            source_page=item.source_page,
+            source_quote=item.source_quote,
+            confidence=item.confidence,
+            ambiguity_notes=item.ambiguity_notes,
+            extraction_version=1,
+        )
+        db.add(criterion)
+        criteria.append(criterion)
+
+    case.status = "criteria_extracted"
+    log_audit_event(
+        db,
+        organization_id=organization_id,
+        case_id=case.id,
+        user_id=user_id,
+        action="criteria.extracted",
+        entity_type="case",
+        entity_id=case.id,
+        metadata={"criteria_count": len(criteria), "analysis_mode": "llm"},
+    )
+    db.commit()
+    for criterion in criteria:
+        db.refresh(criterion)
+    return criteria
+
+
 def extract_criteria(db: Session, *, case_id: str, organization_id: str, user_id: str) -> list[PolicyCriterion]:
     case = _case(db, case_id, organization_id)
     policy_chunks = _chunks(
@@ -159,6 +333,15 @@ def extract_criteria(db: Session, *, case_id: str, organization_id: str, user_id
     )
     if not policy_chunks:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a payer policy before extraction")
+
+    if llm_gateway.structured_analysis_enabled():
+        return _extract_criteria_with_llm(
+            db,
+            case=case,
+            policy_chunks=policy_chunks,
+            organization_id=organization_id,
+            user_id=user_id,
+        )
 
     run = AnalysisRun(
         organization_id=organization_id,
