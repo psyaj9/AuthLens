@@ -74,29 +74,30 @@ Design rules:
 
 ## Structured LLM Gateway
 
-Deterministic analysis remains the default. Set `PRIORAUTH_ANALYSIS_MODE=llm` only for controlled structured-output experiments.
+Deterministic analysis remains the default. Set `PRIORAUTH_ANALYSIS_MODE=llm` only for controlled structured-output experiments backed by the Groq JSON-schema provider.
 
 ```mermaid
 flowchart TD
   A[Typed payer policy chunks] --> B[Untrusted document prompt wrapper]
-  B --> C[Structured output provider boundary]
+  B --> C[Groq JSON-schema provider boundary]
   C --> D[Pydantic schema validation]
   D -->|valid| E[Persist completed AnalysisRun]
   E --> F[Create criteria rows]
-  D -->|invalid JSON/schema| G[Persist failed AnalysisRun]
+  C -->|provider failure/no content| G[Persist failed AnalysisRun]
+  D -->|invalid JSON/schema| G
   G --> H[Return safe 502 without raw model output]
 ```
 
 Current scope:
 
-- `server/services/llm_gateway.py` validates JSON with Pydantic and records completed or failed analysis runs.
+- `server/services/llm_gateway.py` calls Groq through a lazy JSON-schema request boundary, extracts raw JSON content, validates it with Pydantic, and records failed analysis runs for invalid output.
 - `server/services/analysis_schemas.py` defines structured criteria, evidence, and readiness contracts.
-- Criteria extraction has an opt-in LLM branch behind `PRIORAUTH_ANALYSIS_MODE=llm`; deterministic extraction stays active by default.
-- Failed structured output stores schema/error metadata only. Raw PDF text and raw model output are not stored in failure metadata.
+- Criteria extraction has an opt-in LLM branch behind `PRIORAUTH_ANALYSIS_MODE=llm`; deterministic extraction stays active by default and does not require a live LLM call.
+- Failed structured output stores schema/error-type metadata only. Raw PDF text, raw model output, and provider exception text are not stored in failure metadata.
+- `PRIORAUTH_LLM_MODEL` selects the structured-analysis Groq model when set; otherwise the gateway falls back to `GROQ_MODEL`, then `llama-3.1-8b-instant`.
 
 Remaining Phase 4 work:
 
-- Add the provider call implementation behind the gateway boundary.
 - Extend the opt-in branch to evidence matching and readiness reports.
 - Expand the eval runner from smoke checks into expected criteria, evidence statuses, missing-item, and prompt-injection outcome checks.
 
@@ -237,7 +238,8 @@ Backend variables:
 | `MAX_UPLOAD_FILES` | No | Maximum uploaded files per request. |
 | `ENVIRONMENT` | No | Use `local`, `preview`, `test`, or `production`. |
 | `PRIORAUTH_ANALYSIS_MODE` | No | Defaults to deterministic analysis. Set to `llm` only for structured-output experiments. |
-| `PRIORAUTH_LLM_MODEL` | No | Metadata label for structured analysis runs. |
+| `PRIORAUTH_LLM_MODEL` | No | Groq model for structured prior-auth analysis; falls back to `GROQ_MODEL`, then `llama-3.1-8b-instant`. |
+| `PRIORAUTH_LLM_MAX_TOKENS` | No | Maximum tokens for structured Groq responses; defaults to `2000`. |
 
 Client variables:
 
@@ -356,7 +358,7 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
 3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
 4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
-5. Phase 4 - In progress: structured LLM gateway foundation and opt-in criteria branch are implemented; evidence/readiness LLM branches and expanded eval scoring remain.
+5. Phase 4 - In progress: structured Groq provider boundary and opt-in criteria branch are implemented; evidence/readiness LLM branches and expanded eval scoring remain.
 6. Phase 5 - Harden auth/session behavior, security scans, CI, and deployment gates.
 
 Deferred capabilities include OCR fallback, async processing workers, object storage, admin analytics, EHR/FHIR integration, payer submission, and real PHI production readiness.

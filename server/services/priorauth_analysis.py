@@ -241,7 +241,11 @@ def _extract_criteria_with_llm(
         source_text=_policy_source_text(db, policy_chunks),
     )
     try:
-        raw_output = llm_gateway.generate_structured_output(prompt)
+        raw_output = llm_gateway.generate_structured_output(
+            prompt,
+            schema=CriteriaExtractionOutput,
+            schema_name=CriteriaExtractionOutput.__name__,
+        )
         output = llm_gateway.parse_structured_output_with_run(
             db,
             CriteriaExtractionOutput,

@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from pydantic import BaseModel, Field
@@ -191,6 +192,99 @@ class LlmGatewayTests(unittest.TestCase):
             self.assertFalse(gateway.structured_analysis_enabled())
         with patch.dict(os.environ, {"PRIORAUTH_ANALYSIS_MODE": "llm"}, clear=True):
             self.assertTrue(gateway.structured_analysis_enabled())
+
+    def test_generate_structured_output_calls_groq_with_json_schema_response_format(self):
+        gateway = self._gateway()
+        captured = {}
+
+        class FakeCompletions:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content='{"criteria": []}'))]
+                )
+
+        class FakeGroq:
+            def __init__(self, *, api_key):
+                captured["api_key"] = api_key
+                self.chat = SimpleNamespace(completions=FakeCompletions())
+
+        with patch.dict(
+            os.environ,
+            {
+                "GROQ_API_KEY": "test-groq-key",
+                "PRIORAUTH_LLM_MODEL": "llama-3.3-70b-versatile",
+                "PRIORAUTH_LLM_MAX_TOKENS": "900",
+            },
+        ), patch.object(gateway, "Groq", FakeGroq, create=True):
+            output = gateway.generate_structured_output(
+                "Extract criteria.",
+                schema=StructuredCriteriaOutput,
+                schema_name="StructuredCriteriaOutput",
+            )
+
+        self.assertEqual(output, '{"criteria": []}')
+        self.assertEqual(captured["api_key"], "test-groq-key")
+        self.assertEqual(captured["model"], "llama-3.3-70b-versatile")
+        self.assertEqual(captured["temperature"], 0)
+        self.assertEqual(captured["max_tokens"], 900)
+        self.assertEqual(captured["messages"][0]["role"], "system")
+        self.assertEqual(captured["messages"][1], {"role": "user", "content": "Extract criteria."})
+        response_format = captured["response_format"]
+        self.assertEqual(response_format["type"], "json_schema")
+        self.assertTrue(response_format["json_schema"]["strict"])
+        self.assertEqual(response_format["json_schema"]["name"], "StructuredCriteriaOutput")
+        self.assertEqual(response_format["json_schema"]["schema"]["type"], "object")
+
+    def test_generate_structured_output_redacts_provider_exception_text(self):
+        gateway = self._gateway()
+
+        class FailingCompletions:
+            def create(self, **_kwargs):
+                raise RuntimeError("raw provider failure with document text: Coverage requires six weeks")
+
+        class FailingGroq:
+            def __init__(self, *, api_key):
+                self.chat = SimpleNamespace(completions=FailingCompletions())
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-groq-key"}), patch.object(
+            gateway, "Groq", FailingGroq, create=True
+        ):
+            with self.assertRaises(gateway.StructuredOutputError) as raised:
+                gateway.generate_structured_output("Coverage requires six weeks", schema=StructuredCriteriaOutput)
+
+        self.assertNotIn("Coverage requires", str(raised.exception))
+        self.assertIn("provider request failed", str(raised.exception))
+
+    def test_generate_structured_output_missing_api_key_fails_without_provider_call(self):
+        gateway = self._gateway()
+
+        class UnexpectedGroq:
+            def __init__(self, *, api_key):
+                raise AssertionError("provider should not be created without an API key")
+
+        with patch.dict(os.environ, {}, clear=True), patch.object(gateway, "Groq", UnexpectedGroq):
+            with self.assertRaises(gateway.StructuredOutputError) as raised:
+                gateway.generate_structured_output("Extract criteria.", schema=StructuredCriteriaOutput)
+
+        self.assertIn("not configured", str(raised.exception))
+
+    def test_generate_structured_output_empty_provider_content_fails_closed(self):
+        gateway = self._gateway()
+
+        class EmptyCompletions:
+            def create(self, **_kwargs):
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="   "))])
+
+        class EmptyGroq:
+            def __init__(self, *, api_key):
+                self.chat = SimpleNamespace(completions=EmptyCompletions())
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-groq-key"}), patch.object(gateway, "Groq", EmptyGroq):
+            with self.assertRaises(gateway.StructuredOutputError) as raised:
+                gateway.generate_structured_output("Extract criteria.", schema=StructuredCriteriaOutput)
+
+        self.assertIn("returned no content", str(raised.exception))
 
     def test_priorauth_analysis_schemas_validate_expected_structured_outputs(self):
         schemas = importlib.import_module("services.analysis_schemas")

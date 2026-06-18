@@ -6,6 +6,7 @@ langchain
 langchain-community
 langchain-core
 langchain-groq
+groq
 
 pinecone
 

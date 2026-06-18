@@ -25,8 +25,13 @@
 - Added/verified client appeal workflow support: appeal case creation, denial-letter document type, appeal draft helper/proxy route, and desktop/mobile e2e coverage for generating an appeal draft from a denial letter.
 - Phase 3 verification passed after review fixes: backend unittest discovery with 67 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
 - Phase 4 foundation is now started but not complete: added `server/services/llm_gateway.py`, `server/services/analysis_schemas.py`, Pydantic structured-output parsing, untrusted-document prompt framing, redacted failed `AnalysisRun` recording, and an opt-in `PRIORAUTH_ANALYSIS_MODE=llm` criteria extraction branch.
-- Phase 4 focused verification passed after review fixes: `tests.test_llm_gateway` with 8 tests, five LLM criteria integration tests for valid output, invalid output, ungrounded citations, empty output, and repeated provider failures, backend unittest discovery with 80 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
-- Remaining Phase 4 scope: implement the real structured-output provider boundary, extend the opt-in LLM branch to evidence/readiness, and expand eval scoring beyond smoke readiness/citation/safety checks.
+- Phase 4 focused verification passed after review fixes: `tests.test_llm_gateway` with 9 tests, seven LLM criteria integration tests for valid output, invalid output, ungrounded citations, blank source quotes, empty output, repeated provider failures, and provider failures with underlying causes; backend unittest discovery with 83 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
+- Remaining Phase 4 scope: extend the opt-in LLM branch to evidence/readiness and expand eval scoring beyond smoke readiness/citation/safety checks.
+- Current Phase 4 provider-boundary slice:
+  - [x] Add tests for the Groq JSON-schema request boundary and direct SDK dependency.
+  - [x] Implement `generate_structured_output` through the Groq SDK while preserving fail-closed behavior and redacted errors.
+  - [x] Update README/env docs for the real structured provider path.
+  - [ ] Verify focused gateway tests, backend discovery, client gates, and review findings.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

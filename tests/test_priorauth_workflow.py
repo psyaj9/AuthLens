@@ -858,7 +858,7 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         )
         llm_gateway = importlib.import_module("services.llm_gateway")
 
-        def fail_with_provider_cause(_prompt):
+        def fail_with_provider_cause(_prompt, **_kwargs):
             try:
                 raise RuntimeError("provider unavailable")
             except RuntimeError as exc:

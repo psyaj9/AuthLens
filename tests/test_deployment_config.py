@@ -11,6 +11,11 @@ class DeploymentConfigTests(unittest.TestCase):
 
         self.assertIn("psycopg2-binary", requirements)
 
+    def test_backend_requirements_include_direct_groq_sdk_dependency(self):
+        requirements = (PROJECT_ROOT / "server" / "requirements.txt").read_text(encoding="utf-8")
+
+        self.assertIn("groq", requirements.splitlines())
+
     def test_render_start_command_runs_migrations_before_uvicorn(self):
         render_yaml = (PROJECT_ROOT / "render.yaml").read_text(encoding="utf-8")
         expected_start = "python -m alembic -c ../alembic.ini upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT"
