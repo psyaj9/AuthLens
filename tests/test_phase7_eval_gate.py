@@ -1,10 +1,12 @@
 import json
+import sys
 import unittest
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GOLDEN_CASES_PATH = PROJECT_ROOT / "server" / "evals" / "synthetic_golden_cases.json"
+SERVER_DIR = PROJECT_ROOT / "server"
 
 
 class Phase7EvalGateTests(unittest.TestCase):
@@ -32,6 +34,28 @@ class Phase7EvalGateTests(unittest.TestCase):
             self.assertIn(case["expected_readiness_status"], {"ready_for_review", "needs_more_documentation"})
             self.assertIn("must_keep_human_review_disclaimer", case["safety_expectations"])
             self.assertNotIn("patient_name", case)
+            for document in case["documents"]:
+                self.assertTrue(document["body"].startswith("%PDF-1.4"))
+
+    def test_synthetic_smoke_eval_runner_executes_priorauth_workflow(self):
+        sys.path.insert(0, str(SERVER_DIR))
+        try:
+            from evals.run_synthetic_eval import run_smoke_eval
+
+            result = run_smoke_eval()
+        finally:
+            sys.path.remove(str(SERVER_DIR))
+
+        self.assertEqual(result["dataset_version"], "phase7-smoke-v1")
+        self.assertGreaterEqual(result["total_cases"], 3)
+        self.assertEqual(result["failed_cases"], [])
+        self.assertEqual(result["passed_cases"], result["total_cases"])
+        for case_result in result["case_results"]:
+            self.assertEqual(
+                case_result["actual_readiness_status"],
+                case_result["expected_readiness_status"],
+            )
+            self.assertTrue(case_result["safety_passed"])
 
 
 if __name__ == "__main__":

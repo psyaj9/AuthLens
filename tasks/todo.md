@@ -1,3 +1,20 @@
+# Next PRD Implementation Phases
+
+- [ ] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
+- [ ] Execute Phase 1: reviewer workspace completion.
+- [ ] Execute Phase 2: export artifacts, download APIs, and packet manifest.
+- [ ] Execute Phase 3: appeal workflow with denial-letter extraction.
+- [ ] Execute Phase 4: structured LLM gateway and expanded eval runner.
+- [ ] Execute Phase 5: production-readiness hardening, security scan, and deployment gates.
+
+## Review
+
+- Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
+- Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
+- Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.
+- Security/eval explorer recommended executable synthetic evals, prompt-injection outcomes, cross-tenant direct-ID tests, auth/session hardening, env gates, dependency audit, and PHI boundary checks.
+- Consolidated order: lock eval and tenant-isolation guardrails first, expose reviewer controls, then exports, appeals, structured LLM/evals, and production hardening.
+
 # Complete Phase 7 MVP Gate And PRD Re-Review
 
 - [x] Re-read the PRD and map current implementation against remaining MVP/Phase 7 requirements.
