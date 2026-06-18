@@ -10,6 +10,7 @@ import {
   draftListSchema,
   draftSchema,
   evidenceListSchema,
+  exportArtifactSchema,
   forgotPasswordResponseSchema,
   messageResponseSchema,
   readinessReportSchema,
@@ -20,6 +21,7 @@ import {
   type Criterion,
   type DraftLetter,
   type EvidenceMatch,
+  type ExportArtifact,
   type ReadinessReport,
   type UserProfile
 } from "./priorauth-schemas";
@@ -311,4 +313,25 @@ export async function approveDraft(draftId: string): Promise<DraftLetter> {
     method: "POST"
   });
   return parseLocalRouteResponse(response, draftSchema);
+}
+
+export async function createReadinessExport(caseId: string): Promise<ExportArtifact> {
+  const response = await fetch(`/api/cases/${caseId}/exports/readiness-report`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, exportArtifactSchema);
+}
+
+export async function createLetterExport(caseId: string): Promise<ExportArtifact> {
+  const response = await fetch(`/api/cases/${caseId}/exports/letter`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, exportArtifactSchema);
+}
+
+export async function createPacketExport(caseId: string): Promise<ExportArtifact> {
+  const response = await fetch(`/api/cases/${caseId}/exports/packet`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, exportArtifactSchema);
 }

@@ -149,6 +149,18 @@ export const citationCheckSchema = z.object({
   created_at: z.string()
 });
 
+export const exportArtifactSchema = z.object({
+  id: z.string(),
+  case_id: z.string(),
+  export_type: z.string(),
+  status: z.string(),
+  file_name: z.string(),
+  mime_type: z.string(),
+  content_markdown: z.string(),
+  manifest_json: z.record(z.string(), z.unknown()),
+  created_at: z.string()
+});
+
 export type UserProfile = z.infer<typeof userProfileSchema>;
 export type MessageResponse = z.infer<typeof messageResponseSchema>;
 export type ForgotPasswordResponse = z.infer<typeof forgotPasswordResponseSchema>;
@@ -159,3 +171,4 @@ export type EvidenceMatch = z.infer<typeof evidenceMatchSchema>;
 export type ReadinessReport = z.infer<typeof readinessReportSchema>;
 export type DraftLetter = z.infer<typeof draftSchema>;
 export type CitationCheck = z.infer<typeof citationCheckSchema>;
+export type ExportArtifact = z.infer<typeof exportArtifactSchema>;

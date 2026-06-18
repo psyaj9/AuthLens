@@ -298,6 +298,43 @@ class ExportWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(cross_org_response.status_code, 404)
 
+    def test_exports_have_migration_audit_events_and_no_local_paths(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        clinician_token = self._login(client, email="clinician@test.authlens.local", role="clinician_reviewer")
+        case_id = self._prepare_analyzed_case(client, coordinator_token)
+        draft = self._create_verified_draft(client, coordinator_token, case_id)
+        approve_response = client.post(
+            f"/api/drafts/{draft['id']}/approve",
+            headers={"Authorization": f"Bearer {clinician_token}"},
+        )
+        self.assertEqual(approve_response.status_code, 200, approve_response.text)
+
+        export_response = client.post(
+            f"/api/cases/{case_id}/exports/packet",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(export_response.status_code, 201, export_response.text)
+        artifact = export_response.json()
+        serialized = str(artifact)
+        self.assertNotIn("server/uploads", serialized)
+        self.assertNotIn("file_uri", serialized)
+
+        download_response = client.get(
+            f"/api/exports/{artifact['id']}/download",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(download_response.status_code, 200, download_response.text)
+
+        audit_response = client.get("/api/audit", headers={"Authorization": f"Bearer {self._login(client, email='admin@test.authlens.local', role='admin')}"})
+        self.assertEqual(audit_response.status_code, 200, audit_response.text)
+        actions = [event["action"] for event in audit_response.json()["events"]]
+        self.assertIn("export.created", actions)
+        self.assertIn("export.downloaded", actions)
+
+        migration = (self.server_dir / "migrations" / "versions" / "20260618_0003_exports.py").read_text(encoding="utf-8")
+        self.assertIn('down_revision: Union[str, Sequence[str], None] = "20260617_0002"', migration)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,9 @@ import {
   approveDraft,
   askQuestion,
   AuthLensApiError,
+  createLetterExport,
+  createPacketExport,
+  createReadinessExport,
   forgotPassword,
   overrideEvidenceMatch,
   registerUser,
@@ -260,6 +263,47 @@ describe("client API client", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/drafts/draft_123/approve",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("creates export artifacts through local case routes", async () => {
+    const exportPayload = {
+      id: "export_123",
+      case_id: "case_123",
+      export_type: "packet",
+      status: "ready",
+      file_name: "syn-lmri-packet.md",
+      mime_type: "text/markdown",
+      content_markdown: "# Packet",
+      manifest_json: { synthetic_only: true },
+      created_at: "2026-06-18T00:00:00Z"
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ...exportPayload, export_type: "readiness_report" }))
+      .mockResolvedValueOnce(Response.json({ ...exportPayload, export_type: "letter" }))
+      .mockResolvedValueOnce(Response.json(exportPayload));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createReadinessExport("case_123");
+    await createLetterExport("case_123");
+    const packet = await createPacketExport("case_123");
+
+    expect(packet.export_type).toBe("packet");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/cases/case_123/exports/readiness-report",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/cases/case_123/exports/letter",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/cases/case_123/exports/packet",
       expect.objectContaining({ method: "POST" })
     );
   });
