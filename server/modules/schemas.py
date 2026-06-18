@@ -263,6 +263,22 @@ class CitationCheckResponse(BaseModel):
     created_at: datetime
 
 
+class ExportArtifactResponse(BaseModel):
+    id: str
+    case_id: str
+    export_type: str
+    status: str
+    file_name: str
+    mime_type: str
+    content_markdown: str
+    manifest_json: dict
+    created_at: datetime
+
+
+class ExportListResponse(BaseModel):
+    exports: list[ExportArtifactResponse]
+
+
 class AuditEventResponse(BaseModel):
     id: str
     organization_id: str

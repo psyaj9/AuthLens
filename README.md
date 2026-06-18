@@ -40,7 +40,6 @@ Implemented:
 
 Next implementation phases:
 
-- Complete reviewer workspace controls in the client for criteria edits, evidence overrides, draft edits, citation details, and approval.
 - Add export artifacts for readiness reports, prior-auth letters, and packet manifests.
 - Implement the appeal path from denial-letter upload through appeal draft generation.
 - Add a structured LLM gateway with schema validation and fail-closed analysis runs.
@@ -290,8 +289,8 @@ Dependency caches are optimizations only. A cache miss should still produce a cl
 Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans/2026-06-18-next-prd-phases.md`:
 
 1. Phase 0 - Implemented: executable eval and tenant-isolation guardrails.
-2. Phase 1 - Next: complete reviewer workspace controls.
-3. Phase 2 - Add readiness, letter, and packet exports.
+2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
+3. Phase 2 - Next: add readiness, letter, and packet exports.
 4. Phase 3 - Implement denial-letter appeal workflow.
 5. Phase 4 - Add structured LLM gateway and expanded eval runner.
 6. Phase 5 - Harden auth/session behavior, security scans, CI, and deployment gates.

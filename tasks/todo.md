@@ -1,7 +1,7 @@
 # Next PRD Implementation Phases
 
 - [x] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
-- [ ] Execute Phase 1: reviewer workspace completion.
+- [x] Execute Phase 1: reviewer workspace completion.
 - [ ] Execute Phase 2: export artifacts, download APIs, and packet manifest.
 - [ ] Execute Phase 3: appeal workflow with denial-letter extraction.
 - [ ] Execute Phase 4: structured LLM gateway and expanded eval runner.
@@ -15,6 +15,8 @@
 - Fixed `/api/cases/{case_id}/drafts/appeal` so the deferred route performs auth and organization-scoped case lookup before returning `501`.
 - Added defense-in-depth organization filters for child-row summary/delete paths and a regression test proving mismatched child-row tenants do not affect case summaries.
 - Updated `README.md` around the current prior-auth workspace, including architecture diagrams, multi-agent implementation workflow, test commands, deployment notes, and remaining phases.
+- Phase 1 reviewer workspace is now implemented: client helpers and local proxy coverage for criteria updates, evidence overrides, draft edits, citation verification, and approval; inline reviewer controls in the criteria/evidence/draft tabs; citation issue details; approval disabled until citation verification passes.
+- Phase 1 verification passed: `npm run lint`, `npm run typecheck`, `npm run test` with 40 Vitest tests across 9 files, `npm run build`, and `npm run test:e2e` with 6 desktop/mobile Playwright tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

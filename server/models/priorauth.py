@@ -248,6 +248,24 @@ class CitationCheck(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class ExportArtifact(Base):
+    __tablename__ = "export_artifacts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: new_id("export"))
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("prior_auth_cases.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    export_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(64), nullable=False, default="ready")
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False, default="text/markdown")
+    content_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    manifest_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    __table_args__ = (Index("ix_exports_case_type", "case_id", "export_type"),)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 

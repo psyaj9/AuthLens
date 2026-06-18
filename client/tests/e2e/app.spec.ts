@@ -1,4 +1,132 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function mockAuthenticatedReviewerWorkspace(page: Page) {
+  const casePayload = {
+    id: "case_1",
+    patient_label: "SYN-LMRI-REVIEW",
+    payer_name: "Example Health Plan",
+    plan_name: null,
+    specialty: "Radiology",
+    requested_service: "Lumbar spine MRI",
+    service_code: "72148",
+    diagnosis_summary: null,
+    case_type: "prior_auth",
+    status: "ready_for_review",
+    readiness_score: 100,
+    missing_required_criteria_count: 0,
+    assigned_to_user_id: null,
+    created_at: "2026-06-18T00:00:00Z",
+    updated_at: "2026-06-18T00:00:00Z"
+  };
+
+  await page.route("**/api/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "user_1",
+        email: "reviewer@example.test",
+        name: "Reviewer",
+        role: "clinician_reviewer",
+        organization: { id: "org_1", name: "Review Clinic", plan: "test" }
+      })
+    });
+  });
+  await page.route("**/api/cases", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ cases: [casePayload] })
+    });
+  });
+  await page.route("**/api/cases/case_1/documents", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [] })
+    });
+  });
+  await page.route("**/api/cases/case_1/criteria", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        criteria: [
+          {
+            id: "crit_1",
+            criterion_code: "C1",
+            criterion_type: "documentation",
+            requirement: "Coverage requires six weeks of conservative therapy.",
+            required_evidence: ["Therapy dates"],
+            is_required: true,
+            source_file: "policy.pdf",
+            source_page: "1",
+            source_quote: "Coverage requires six weeks of conservative therapy.",
+            confidence: 0.82,
+            ambiguity_notes: [],
+            reviewer_status: "unreviewed"
+          }
+        ]
+      })
+    });
+  });
+  await page.route("**/api/cases/case_1/evidence", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        matches: [
+          {
+            id: "match_1",
+            criterion_id: "crit_1",
+            status: "met",
+            evidence_summary: "Patient documentation supports C1.",
+            source_file: "note.pdf",
+            source_page: "2",
+            source_quote: "Six weeks of therapy are documented.",
+            why_it_matters: "Reviewer should confirm the citation.",
+            missing_evidence: [],
+            conflicting_evidence: [],
+            recommended_action: "Clinician reviewer should confirm the cited evidence before submission.",
+            confidence: 0.86,
+            reviewer_override_status: null,
+            reviewer_override_reason: null
+          }
+        ]
+      })
+    });
+  });
+  await page.route("**/api/cases/case_1/drafts", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        drafts: [
+          {
+            id: "draft_1",
+            case_id: "case_1",
+            letter_type: "prior_auth",
+            status: "draft",
+            content_markdown: "Clinician review is required before submission.\n[note.pdf, page 2]",
+            created_by: "ai",
+            approved_at: null,
+            created_at: "2026-06-18T00:00:00Z",
+            updated_at: "2026-06-18T00:00:00Z"
+          }
+        ]
+      })
+    });
+  });
+  await page.route("**/api/drafts/draft_1/verify-citations", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "cite_1",
+        draft_letter_id: "draft_1",
+        verification_status: "pass",
+        unsupported_claims: [],
+        weakly_supported_claims: [],
+        citation_errors: [],
+        safe_to_show_user: true,
+        created_at: "2026-06-18T00:00:00Z"
+      })
+    });
+  });
+}
 
 test.describe("PriorAuth Evidence Copilot", () => {
   test("renders account login as the first screen without static credentials", async ({ page }) => {
@@ -28,5 +156,29 @@ test.describe("PriorAuth Evidence Copilot", () => {
     await expect(
       page.getByRole("button", { name: "Sign in" })
     ).toBeVisible();
+  });
+
+  test("shows reviewer controls for criteria, evidence, drafts, and citations", async ({ page }) => {
+    await mockAuthenticatedReviewerWorkspace(page);
+    await page.goto("/");
+
+    await expect(page.getByRole("heading", { name: "SYN-LMRI-REVIEW" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Criteria" }).click();
+    await expect(page.getByRole("button", { name: "Save criterion review" })).toBeVisible();
+    await expect(page.getByText("policy.pdf, page 1")).toBeVisible();
+
+    await page.getByRole("button", { name: "Evidence" }).click();
+    await expect(page.getByRole("button", { name: "Save evidence override" })).toBeVisible();
+    await expect(page.getByText("Six weeks of therapy are documented.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Draft" }).click();
+    await expect(page.getByRole("button", { name: "Save draft edits" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Verify citations" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve draft" })).toBeDisabled();
+
+    await page.getByRole("button", { name: "Verify citations" }).click();
+    await expect(page.getByText("Unsupported claims")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve draft" })).toBeEnabled();
   });
 });
