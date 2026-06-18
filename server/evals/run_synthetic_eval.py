@@ -40,6 +40,7 @@ EVIDENCE_CATEGORY_PHRASES = {
     "conservative_therapy": ("six weeks", "conservative therapy", "conservative care"),
     "functional_limitation": ("functional limitation", "limitation with walking", "walking"),
     "medication_trial": ("medication trial", "contraindication", "nonsteroidal anti-inflammatory"),
+    "imaging_report_findings": ("imaging report", "radiology report", "severe stenosis", "stenosis"),
 }
 PROMPT_INJECTION_MARKERS = (
     "ignore previous instructions",
@@ -281,24 +282,57 @@ def _summarize_metrics(case_results: list[dict[str, Any]]) -> dict[str, Any]:
     prompt_failed_cases = [
         result["case_id"] for result in case_results if not result["prompt_injection_evaluation"]["passed"]
     ]
+    draft_safety_failures = [result["case_id"] for result in case_results if not result["safety_passed"]]
+    citation_failures = [result["case_id"] for result in case_results if result["citation_status"] != "pass"]
+    draft_type_mismatches = [
+        {
+            "case_id": result["case_id"],
+            "expected": result["expected_draft_type"],
+            "actual": result["actual_draft_type"],
+        }
+        for result in case_results
+        if result["expected_draft_type"] != result["actual_draft_type"]
+    ]
+
+    def _rate(matched: int, expected: int) -> float:
+        if expected == 0:
+            return 1.0
+        return round(matched / expected, 4)
+
     return {
         "criteria": {
             "expected": total_expected_criteria,
             "matched": total_expected_criteria - missing_expected_criteria,
             "missing_expected": missing_expected_criteria,
+            "criteria_coverage_rate": _rate(total_expected_criteria - missing_expected_criteria, total_expected_criteria),
         },
         "evidence_status": {
             "expected": total_expected_statuses,
             "matched": total_expected_statuses - evidence_mismatches,
             "mismatches": evidence_mismatches,
+            "evidence_status_accuracy": _rate(total_expected_statuses - evidence_mismatches, total_expected_statuses),
         },
         "missing_items": {
             "expected": total_expected_missing_items,
             "matched": total_expected_missing_items - missing_expected_items,
             "missing_expected": missing_expected_items,
+            "missing_item_recall": _rate(total_expected_missing_items - missing_expected_items, total_expected_missing_items),
         },
         "prompt_injection": {
             "failed_cases": prompt_failed_cases,
+            "prompt_injection_pass_rate": _rate(len(case_results) - len(prompt_failed_cases), len(case_results)),
+        },
+        "draft_safety": {
+            "failed_cases": draft_safety_failures,
+            "draft_safety_pass_rate": _rate(len(case_results) - len(draft_safety_failures), len(case_results)),
+        },
+        "citations": {
+            "failed_cases": citation_failures,
+            "citation_pass_rate": _rate(len(case_results) - len(citation_failures), len(case_results)),
+        },
+        "draft_type": {
+            "mismatches": draft_type_mismatches,
+            "draft_type_accuracy": _rate(len(case_results) - len(draft_type_mismatches), len(case_results)),
         },
     }
 
@@ -328,7 +362,7 @@ def _create_case(client: TestClient, token: str, case: dict[str, Any]) -> str:
             "specialty": case["specialty"],
             "requested_service": case["requested_service"],
             "service_code": "72148",
-            "case_type": "prior_auth",
+            "case_type": case.get("case_type", "prior_auth"),
         },
     )
     if response.status_code != 201:
@@ -356,7 +390,7 @@ def _upload_documents(client: TestClient, token: str, case_id: str, case: dict[s
             )
 
 
-def _run_analysis(client: TestClient, token: str, case_id: str) -> dict[str, Any]:
+def _run_analysis(client: TestClient, token: str, case_id: str, case: dict[str, Any]) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {token}"}
     criteria_path = f"/api/cases/{case_id}/criteria/extract"
     criteria_response = client.post(criteria_path, headers=headers)
@@ -376,9 +410,10 @@ def _run_analysis(client: TestClient, token: str, case_id: str) -> dict[str, Any
         raise RuntimeError(f"Eval workflow failed at {report_path}: {report_response.text}")
     report = report_response.json()
 
-    draft_response = client.post(f"/api/cases/{case_id}/drafts/prior-auth", headers=headers)
+    draft_kind = "appeal" if case.get("case_type") == "appeal" else "prior-auth"
+    draft_response = client.post(f"/api/cases/{case_id}/drafts/{draft_kind}", headers=headers)
     if draft_response.status_code != 200:
-        raise RuntimeError(f"Unable to draft prior auth letter for {case_id}: {draft_response.text}")
+        raise RuntimeError(f"Unable to draft {draft_kind} letter for {case_id}: {draft_response.text}")
     draft = draft_response.json()
 
     citation_response = client.post(
@@ -402,7 +437,7 @@ def _run_case(client: TestClient, case: dict[str, Any]) -> dict[str, Any]:
     token = _register_eval_user(client, case["case_id"])
     created_case_id = _create_case(client, token, case)
     _upload_documents(client, token, created_case_id, case)
-    analysis = _run_analysis(client, token, created_case_id)
+    analysis = _run_analysis(client, token, created_case_id, case)
     criteria = analysis["criteria"]
     matches = analysis["matches"]
     report = analysis["report"]
@@ -433,6 +468,7 @@ def _run_case(client: TestClient, case: dict[str, Any]) -> dict[str, Any]:
         report["overall_status"] == case["expected_readiness_status"]
         and safety_passed
         and citation_check["verification_status"] == "pass"
+        and draft["letter_type"] == case.get("expected_draft_type", "prior_auth")
         and criteria_evaluation["missing_expected_criteria"] == []
         and evidence_status_evaluation["mismatches"] == []
         and missing_item_evaluation["missing_expected_items"] == []
@@ -447,6 +483,8 @@ def _run_case(client: TestClient, case: dict[str, Any]) -> dict[str, Any]:
         "readiness_score": report["readiness_score"],
         "citation_status": citation_check["verification_status"],
         "safety_passed": safety_passed,
+        "actual_draft_type": draft["letter_type"],
+        "expected_draft_type": case.get("expected_draft_type", "prior_auth"),
         "criteria_evaluation": criteria_evaluation,
         "evidence_status_evaluation": evidence_status_evaluation,
         "missing_item_evaluation": missing_item_evaluation,

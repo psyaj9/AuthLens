@@ -334,7 +334,18 @@ Post-deploy smoke checks:
 ```powershell
 curl.exe https://<render-backend-host>/api/health/
 curl.exe https://<vercel-client-host>/
+curl.exe https://<vercel-client-host>/api/health
 ```
+
+Scripted live smoke gate:
+
+```powershell
+$env:AUTHLENS_RENDER_BACKEND_URL="https://<render-backend-host>"
+$env:AUTHLENS_VERCEL_CLIENT_URL="https://<vercel-client-host>"
+.\.venv\Scripts\python.exe scripts\deployment_smoke.py
+```
+
+CircleCI runs this script only when both `AUTHLENS_RENDER_BACKEND_URL` and `AUTHLENS_VERCEL_CLIENT_URL` are configured. The gate checks Render backend health, the Vercel client root page, and the Vercel `/api/health` route so client-to-backend binding is verified after deploy.
 
 ## CI
 

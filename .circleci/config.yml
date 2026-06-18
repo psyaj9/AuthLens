@@ -45,6 +45,15 @@ jobs:
             DATABASE_URL=sqlite:///server/ci_migration_check.db python -m alembic -c alembic.ini upgrade head
             rm -f server/ci_migration_check.db
 
+      - run:
+          name: Run live deployment smoke gate when configured
+          command: |
+            if [ -n "$AUTHLENS_RENDER_BACKEND_URL" ] && [ -n "$AUTHLENS_VERCEL_CLIENT_URL" ]; then
+              python scripts/deployment_smoke.py
+            else
+              echo "Skipping deployment smoke: live deployment URLs are not configured."
+            fi
+
   client-test-build:
     docker:
       - image: cimg/node:22.16
