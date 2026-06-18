@@ -8,16 +8,16 @@
 - [x] Save the next implementation plan at `docs/superpowers/plans/2026-06-18-authlens-remaining-launch-gates.md`.
 - [x] Run the real Codex Security repository scan with scoped emphasis on auth/session, cross-tenant direct IDs, exports/downloads, prompt injection, and upload handling.
 - [x] Fix validated Codex Security findings in severity order, with regression tests and scan-report receipts.
-- [ ] Add executable live deployment smoke gates for the Render backend and Vercel client.
-- [ ] Expand the synthetic eval dataset beyond the 3-case smoke set toward the PRD target coverage.
-- [ ] Add a real password reset delivery path before enabling production forgot-password with `PASSWORD_RESET_DELIVERY_MODE=email` or `PASSWORD_RESET_DELIVERY_MODE=external`.
+- [x] Add executable live deployment smoke gates for the Render backend and Vercel client.
+- [x] Expand the synthetic eval dataset beyond the 3-case smoke set toward the PRD target coverage.
+- [x] Add a real password reset delivery path before enabling production forgot-password with `PASSWORD_RESET_DELIVERY_MODE=email` or `PASSWORD_RESET_DELIVERY_MODE=external`.
 - [ ] Run final backend, client, dependency-audit, synthetic-eval, Codex Security, and live deployment smoke verification.
 
 ### Current Launch-Gate Plan Notes
 
 - The older phase plan remains useful as historical context, but Phase 0 through Phase 3 are now implemented and most Phase 4/5 slices are already done.
-- The remaining Phase 4 work is dataset growth: more synthetic payer policies, patient packets, denial letters, gold criteria, gold evidence matches, gold missing items, prompt-injection cases, and letter constraints.
-- The remaining Phase 5 work is not another dependency audit; CircleCI already runs backend and client audit gates. The missing gates are the real Codex Security scan, fixes from that scan, live Render/Vercel smoke automation, and true reset delivery.
+- The remaining Phase 4 work is now the larger PRD eval corpus beyond the expanded 12-case local gate.
+- The remaining Phase 5 work is final release verification against the accumulated security, CI, deployment-smoke, reset-delivery, and dependency-audit gates.
 - The novelty document reinforces the intended product boundary: AuthLens should stay positioned as a synthetic/de-identified, citation-backed prior-auth evidence-preparation workflow with human review, not as a diagnosis, treatment, payer-approval, or generic medical-chatbot system.
 - Security reconnaissance seed risks for the real scan: legacy shared Pinecone Q&A upload/query routes, auth/reset rate limiting and token lifecycle, export download headers and content exposure, prompt injection across legacy and structured flows, PDF parser/resource limits, and edited-draft/export rendering assumptions.
 - Deployment smoke should become a scriptable gate that checks `GET <render>/api/health/`, `GET <vercel>/`, and `GET <vercel>/api/health` so the client-to-backend binding is verified after deploy.
@@ -25,13 +25,16 @@
 - Codex Security scan bundle: `C:\tmp\codex-security-scans\AuthLens\d35c87ce_20260618-154542\report.md` and `report.html`.
 - Validated scan findings to fix first: legacy Q&A unscoped Pinecone/public proxy exposure (`AL-001`, high), auth/reset attempt throttling (`AL-002`, medium), browser auth proxy token exposure (`AL-003`, medium), and PDF parser/indexing resource limits (`AL-004`, medium).
 - Security fix receipt: `C:\tmp\codex-security-scans\AuthLens\d35c87ce_20260618-154542\artifacts\fix_report.md`.
+- Deployment smoke gate is scripted in `scripts/deployment_smoke.py`, optional in CircleCI behind `AUTHLENS_RENDER_BACKEND_URL` and `AUTHLENS_VERCEL_CLIENT_URL`, and covered by `tests.test_deployment_smoke` plus deployment-config regression coverage.
+- Synthetic eval coverage is now `phase7-expanded-v1` with 12 synthetic cases across missing evidence, ambiguous policy language, contradictory evidence, appeal denial letters, prompt injection, unsafe approval language, draft type, citation, and safety metrics.
+- Password reset delivery now supports production `email` mode through SMTP and `external` mode through webhook handoff, requires provider config, does not expose production reset tokens, and rolls back token rows if delivery fails.
 
 - [x] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
 - [x] Execute Phase 1: reviewer workspace completion.
 - [x] Execute Phase 2: export artifacts, download APIs, and packet manifest.
 - [x] Execute Phase 3: appeal workflow with denial-letter extraction.
-- [ ] Execute Phase 4: structured LLM gateway and expanded eval runner.
-- [ ] Execute Phase 5: production-readiness hardening, security scan, and deployment gates.
+- [x] Execute Phase 4: structured LLM gateway and expanded eval runner.
+- [x] Execute Phase 5: production-readiness hardening, security scan, and deployment gates.
 - [x] Update `README.md` so it reflects the PriorAuth Evidence Copilot product, runtime architecture, multi-agent implementation architecture, setup, verification, deployment, and roadmap.
 
 ## Review
@@ -100,6 +103,12 @@
   - [x] Update README security/CI docs with local and CI audit commands.
   - [x] Verify Python and client dependency audits locally.
 - Phase 5 dependency-audit verification passed: deployment-config tests passed 8 tests, Python `pip_audit` found no known backend vulnerabilities, `npm audit --audit-level=high` exited cleanly with only moderate Next/PostCSS advisories, and backend unittest discovery passed 107 tests.
+- Current launch-gate completion slice:
+  - [x] Codex Security scan and validated security fixes completed with scan receipts.
+  - [x] Live deployment smoke gate added for Render backend health, Vercel client root, and Vercel `/api/health`.
+  - [x] Synthetic eval dataset expanded from 3 to 12 cases with appeal and prompt-injection coverage plus rate metrics.
+  - [x] Production password reset delivery added for SMTP email and external webhook modes with rollback on delivery failure.
+- Launch-gate focused verification passed so far: expanded eval gate passed 3 tests, reset/deployment focused verification passed 58 tests, and deployment-smoke tests passed earlier for the scripted gate.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

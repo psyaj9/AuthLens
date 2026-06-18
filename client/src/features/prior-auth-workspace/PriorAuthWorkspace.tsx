@@ -127,6 +127,13 @@ function textToList(value: string) {
     .filter(Boolean);
 }
 
+function initialResetTokenFromLocation() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return new URLSearchParams(window.location.search).get("reset_token") ?? "";
+}
+
 function citationIssueText(item: Record<string, unknown>) {
   const issue = typeof item.issue === "string" ? item.issue : undefined;
   const claim = typeof item.claim === "string" ? item.claim : undefined;
@@ -184,22 +191,14 @@ function LoginPanel({
   onResetPassword: (resetToken: string, password: string) => void;
   status: AsyncStatus;
 }) {
+  const [initialResetToken] = useState(initialResetTokenFromLocation);
   const [email, setEmail] = useState("");
-  const [credentialsEditable, setCredentialsEditable] = useState(false);
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [credentialsEditable, setCredentialsEditable] = useState(Boolean(initialResetToken));
+  const [mode, setMode] = useState<AuthMode>(initialResetToken ? "reset" : "login");
   const [name, setName] = useState("");
   const [organizationName, setOrganizationName] = useState("");
   const [password, setPassword] = useState("");
-  const [resetToken, setResetToken] = useState("");
-
-  useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("reset_token");
-    if (token) {
-      setResetToken(token);
-      setMode("reset");
-      setCredentialsEditable(true);
-    }
-  }, []);
+  const [resetToken, setResetToken] = useState(initialResetToken);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
