@@ -11,7 +11,7 @@
 - [x] Add executable live deployment smoke gates for the Render backend and Vercel client.
 - [x] Expand the synthetic eval dataset beyond the 3-case smoke set toward the PRD target coverage.
 - [x] Add a real password reset delivery path before enabling production forgot-password with `PASSWORD_RESET_DELIVERY_MODE=email` or `PASSWORD_RESET_DELIVERY_MODE=external`.
-- [ ] Run final backend, client, dependency-audit, synthetic-eval, Codex Security, and live deployment smoke verification.
+- [x] Run final backend, client, dependency-audit, synthetic-eval, Codex Security, and live deployment smoke verification.
 
 ### Current Launch-Gate Plan Notes
 
@@ -108,7 +108,8 @@
   - [x] Live deployment smoke gate added for Render backend health, Vercel client root, and Vercel `/api/health`.
   - [x] Synthetic eval dataset expanded from 3 to 12 cases with appeal and prompt-injection coverage plus rate metrics.
   - [x] Production password reset delivery added for SMTP email and external webhook modes with rollback on delivery failure.
-- Launch-gate focused verification passed so far: expanded eval gate passed 3 tests, reset/deployment focused verification passed 58 tests, and deployment-smoke tests passed earlier for the scripted gate.
+- Final launch-gate verification passed: backend unittest discovery passed 121 tests, standalone synthetic eval passed 12/12 cases with all summary rates at 1.0, client lint/typecheck/unit/build/e2e passed, backend dependency audit found no known vulnerabilities, and client high-severity audit exited cleanly with only moderate Next/PostCSS advisories.
+- Live Render/Vercel smoke was not executed against real deployments because `AUTHLENS_RENDER_BACKEND_URL` and `AUTHLENS_VERCEL_CLIENT_URL` are not configured in the current shell; the scripted gate and optional CircleCI wiring are covered by tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.
