@@ -274,6 +274,25 @@ class LlmGatewayTests(unittest.TestCase):
                 }
             )
 
+    def test_evidence_schema_rejects_met_without_source_citation_fields(self):
+        schemas = importlib.import_module("services.analysis_schemas")
+
+        with self.assertRaises(Exception):
+            schemas.EvidenceMatchingOutput.model_validate(
+                {
+                    "matches": [
+                        {
+                            "criterion_code": "C1",
+                            "status": "met",
+                            "evidence_summary": "Met evidence cannot be uncited.",
+                            "why_it_matters": "A met finding must be citation-backed.",
+                            "recommended_action": "Review citation.",
+                            "confidence": 0.7,
+                        }
+                    ]
+                }
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

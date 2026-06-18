@@ -160,18 +160,33 @@ def _policy_source_text(db: Session, chunks: list[DocumentChunk]) -> str:
     return "\n\n".join(lines)
 
 
-def _source_document_for_criterion(
+def _chunk_supports_source(chunk: DocumentChunk, *, source_page: str, source_quote: str) -> bool:
+    try:
+        cited_page = int(source_page)
+    except ValueError:
+        return False
+    if not (chunk.page_start <= cited_page <= chunk.page_end):
+        return False
+    return source_quote.strip().lower() in chunk.text.lower()
+
+
+def _grounded_policy_chunk_for_criterion(
     db: Session,
     chunks: list[DocumentChunk],
     *,
     source_file: str,
-) -> Document:
-    fallback = _document(db, chunks[0].document_id)
+    source_page: str,
+    source_quote: str,
+) -> DocumentChunk | None:
     for chunk in chunks:
         document = _document(db, chunk.document_id)
-        if document.file_name == source_file:
-            return document
-    return fallback
+        if document.file_name == source_file and _chunk_supports_source(
+            chunk,
+            source_page=source_page,
+            source_quote=source_quote,
+        ):
+            return chunk
+    return None
 
 
 def _raise_structured_output_failure() -> None:
@@ -189,6 +204,7 @@ def _record_llm_generation_failure(
     run_type: str,
     model_version: str,
     error_type: str,
+    schema: str = "CriteriaExtractionOutput",
 ) -> None:
     db.add(
         AnalysisRun(
@@ -198,7 +214,7 @@ def _record_llm_generation_failure(
             status="failed",
             model_version=model_version,
             metadata_json={
-                "schema": "CriteriaExtractionOutput",
+                "schema": schema,
                 "error": llm_gateway.STRUCTURED_OUTPUT_ERROR,
                 "error_type": error_type,
             },
@@ -233,14 +249,7 @@ def _extract_criteria_with_llm(
             model_version=model_version,
         )
     except llm_gateway.StructuredOutputError as exc:
-        if not db.scalar(
-            select(AnalysisRun).where(
-                AnalysisRun.case_id == case.id,
-                AnalysisRun.organization_id == organization_id,
-                AnalysisRun.run_type == "criteria_extraction",
-                AnalysisRun.status == "failed",
-            )
-        ):
+        if exc.__cause__ is None:
             _record_llm_generation_failure(
                 db,
                 organization_id=organization_id,
@@ -250,32 +259,37 @@ def _extract_criteria_with_llm(
                 error_type=type(exc).__name__,
             )
         _raise_structured_output_failure()
-
-    run = db.scalar(
-        select(AnalysisRun)
-        .where(
-            AnalysisRun.case_id == case.id,
-            AnalysisRun.organization_id == organization_id,
-            AnalysisRun.run_type == "criteria_extraction",
-            AnalysisRun.status == "completed",
-        )
-        .order_by(AnalysisRun.created_at.desc())
-    )
-    if run is None:
+    if not output.criteria:
         _record_llm_generation_failure(
             db,
             organization_id=organization_id,
             case_id=case.id,
             run_type="criteria_extraction",
             model_version=model_version,
-            error_type="MissingAnalysisRun",
+            error_type="EmptyCriteriaOutput",
         )
         _raise_structured_output_failure()
-    run.metadata_json = {
-        **(run.metadata_json or {}),
-        "analysis_mode": "llm",
-        "criteria_count": len(output.criteria),
-    }
+
+    grounded_chunks = []
+    for item in output.criteria:
+        chunk = _grounded_policy_chunk_for_criterion(
+            db,
+            policy_chunks,
+            source_file=item.source_file,
+            source_page=item.source_page,
+            source_quote=item.source_quote,
+        )
+        if chunk is None:
+            _record_llm_generation_failure(
+                db,
+                organization_id=organization_id,
+                case_id=case.id,
+                run_type="criteria_extraction",
+                model_version=model_version,
+                error_type="UngroundedCitation",
+            )
+            _raise_structured_output_failure()
+        grounded_chunks.append(chunk)
 
     db.execute(
         delete(PolicyCriterion).where(
@@ -283,9 +297,23 @@ def _extract_criteria_with_llm(
             PolicyCriterion.organization_id == organization_id,
         )
     )
+    run = AnalysisRun(
+        organization_id=organization_id,
+        case_id=case.id,
+        run_type="criteria_extraction",
+        status="completed",
+        model_version=model_version,
+        metadata_json={
+            "schema": CriteriaExtractionOutput.__name__,
+            "analysis_mode": "llm",
+            "criteria_count": len(output.criteria),
+        },
+    )
+    db.add(run)
+    db.flush()
     criteria = []
-    for index, item in enumerate(output.criteria, start=1):
-        document = _source_document_for_criterion(db, policy_chunks, source_file=item.source_file)
+    for index, (item, chunk) in enumerate(zip(output.criteria, grounded_chunks, strict=True), start=1):
+        document = _document(db, chunk.document_id)
         criterion = PolicyCriterion(
             organization_id=organization_id,
             case_id=case.id,

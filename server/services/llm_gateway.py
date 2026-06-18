@@ -58,17 +58,6 @@ def parse_structured_output_with_run(
         db.add(run)
         db.commit()
         raise
-
-    run = AnalysisRun(
-        organization_id=organization_id,
-        case_id=case_id,
-        run_type=run_type,
-        status="completed",
-        model_version=model_version,
-        metadata_json={"schema": model.__name__},
-    )
-    db.add(run)
-    db.commit()
     return parsed
 
 

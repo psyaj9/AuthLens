@@ -621,6 +621,167 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(run.metadata_json["analysis_mode"], "llm")
         self.assertEqual(run.metadata_json["criteria_count"], 1)
 
+    def test_llm_criteria_extraction_rejects_ungrounded_citations_without_wiping_existing_criteria(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-UNGROUNDED")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        baseline_response = client.post(
+            f"/api/cases/{case_id}/criteria/extract",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(baseline_response.status_code, 200, baseline_response.text)
+        self.assertGreaterEqual(len(baseline_response.json()["criteria"]), 1)
+
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        raw_output = """
+        {
+          "criteria": [
+            {
+              "criterion_code": "C1",
+              "criterion_type": "documentation",
+              "requirement": "Fabricated criterion.",
+              "required_evidence": ["Fabricated evidence"],
+              "is_required": true,
+              "source_quote": "This quote is not in the uploaded policy.",
+              "source_file": "other-policy.pdf",
+              "source_page": "99",
+              "confidence": 0.9,
+              "ambiguity_notes": []
+            }
+          ],
+          "missing_or_ambiguous_policy_info": []
+        }
+        """
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/criteria/extract",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json(), {"error": "LLM output failed schema validation"})
+
+        list_response = client.get(
+            f"/api/cases/{case_id}/criteria",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        self.assertEqual(
+            [item["criterion_code"] for item in list_response.json()["criteria"]],
+            [item["criterion_code"] for item in baseline_response.json()["criteria"]],
+        )
+
+    def test_llm_criteria_extraction_rejects_empty_output_without_wiping_existing_criteria(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-EMPTY")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        baseline_response = client.post(
+            f"/api/cases/{case_id}/criteria/extract",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(baseline_response.status_code, 200, baseline_response.text)
+
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value='{"criteria": []}'):
+                response = client.post(
+                    f"/api/cases/{case_id}/criteria/extract",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        self.assertEqual(response.status_code, 502)
+        list_response = client.get(
+            f"/api/cases/{case_id}/criteria",
+            headers={"Authorization": f"Bearer {coordinator_token}"},
+        )
+        self.assertEqual(
+            [item["criterion_code"] for item in list_response.json()["criteria"]],
+            [item["criterion_code"] for item in baseline_response.json()["criteria"]],
+        )
+
+    def test_llm_criteria_generation_failure_records_each_attempt(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-PROVIDER-FAIL")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_mode = os.environ.get("PRIORAUTH_ANALYSIS_MODE")
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        try:
+            for _ in range(2):
+                with patch.object(
+                    llm_gateway,
+                    "generate_structured_output",
+                    side_effect=llm_gateway.StructuredOutputError("provider unavailable"),
+                ):
+                    response = client.post(
+                        f"/api/cases/{case_id}/criteria/extract",
+                        headers={"Authorization": f"Bearer {coordinator_token}"},
+                    )
+                    self.assertEqual(response.status_code, 502)
+        finally:
+            if original_mode is None:
+                os.environ.pop("PRIORAUTH_ANALYSIS_MODE", None)
+            else:
+                os.environ["PRIORAUTH_ANALYSIS_MODE"] = original_mode
+
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            runs = list(
+                db.scalars(
+                    sqlalchemy.select(models.AnalysisRun)
+                    .where(
+                        models.AnalysisRun.case_id == case_id,
+                        models.AnalysisRun.run_type == "criteria_extraction",
+                        models.AnalysisRun.status == "failed",
+                    )
+                    .order_by(models.AnalysisRun.created_at)
+                )
+            )
+
+        self.assertEqual(len(runs), 2)
+        self.assertTrue(all(run.metadata_json["error_type"] == "StructuredOutputError" for run in runs))
+
     def test_draft_edit_blocks_approval_until_citations_are_reverified(self):
         client = self._client()
         coordinator_token = self._login(client)

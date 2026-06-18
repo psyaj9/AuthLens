@@ -24,6 +24,9 @@
 - Addressed Phase 3 review findings: appeal cases can no longer bypass denial-letter requirements through the prior-auth draft route, denial-letter citations must stay attached to the denial-reason line, and draft-generation UI/e2e coverage now follows admin/coordinator RBAC.
 - Added/verified client appeal workflow support: appeal case creation, denial-letter document type, appeal draft helper/proxy route, and desktop/mobile e2e coverage for generating an appeal draft from a denial letter.
 - Phase 3 verification passed after review fixes: backend unittest discovery with 67 tests, client lint/typecheck, Vitest with 47 tests across 10 files, Next production build, and Playwright desktop/mobile e2e with 8 tests.
+- Phase 4 foundation is now started but not complete: added `server/services/llm_gateway.py`, `server/services/analysis_schemas.py`, Pydantic structured-output parsing, untrusted-document prompt framing, redacted failed `AnalysisRun` recording, and an opt-in `PRIORAUTH_ANALYSIS_MODE=llm` criteria extraction branch.
+- Phase 4 focused verification passed: `tests.test_llm_gateway` with 7 tests, two LLM criteria integration tests for valid and invalid structured output, and backend unittest discovery with 76 tests.
+- Remaining Phase 4 scope: implement the real structured-output provider boundary, extend the opt-in LLM branch to evidence/readiness, and expand eval scoring beyond smoke readiness/citation/safety checks.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

@@ -38,11 +38,12 @@ Implemented:
 - Next.js workspace with account flows, case list, prior-auth and appeal case creation, case detail workflow, typed upload, criteria/evidence/readiness/draft views, export controls, and backend proxy routes.
 - Synthetic golden-case fixture runner and cross-tenant direct-ID regression tests.
 - Readiness, letter, and packet markdown exports with persisted manifests and download routes.
+- Structured LLM gateway foundation with Pydantic output schemas, opt-in criteria extraction, redacted failed `AnalysisRun` recording, and untrusted-document prompt framing.
 - Legacy `/api/upload_pdf/` and `/api/queries/` routes for the original PDF Q&A flow.
 
 Next implementation phases:
 
-- Add a structured LLM gateway with schema validation and fail-closed analysis runs.
+- Expand the structured LLM branch beyond criteria extraction into evidence matching and readiness reports.
 - Expand synthetic evals, red-team fixtures, dependency audits, security scans, CI, and production deployment gates.
 - Defer OCR, async workers, object storage, admin analytics, EHR/FHIR, payer submission, and real PHI readiness until after the MVP is stable.
 
@@ -57,6 +58,8 @@ flowchart LR
   FastAPI --> Pinecone[(Pinecone vectors)]
   FastAPI --> Files[(Local upload storage)]
   FastAPI --> Groq[Groq LLM]
+  FastAPI --> Gateway[Structured LLM gateway]
+  Gateway --> Runs[(Analysis runs)]
   FastAPI --> Gemini[Gemini embeddings]
   FastAPI --> Audit[(Audit events)]
 ```
@@ -68,6 +71,34 @@ Design rules:
 - Browser calls go through Next.js route handlers. `BACKEND_API_URL` stays server-side in the client app.
 - Backend routes enforce JWT auth, role checks, and `organization_id` filtering.
 - Production config fails closed for missing `JWT_SECRET`, invalid CORS configuration, and internal-token mismatches.
+
+## Structured LLM Gateway
+
+Deterministic analysis remains the default. Set `PRIORAUTH_ANALYSIS_MODE=llm` only for controlled structured-output experiments.
+
+```mermaid
+flowchart TD
+  A[Typed payer policy chunks] --> B[Untrusted document prompt wrapper]
+  B --> C[Structured output provider boundary]
+  C --> D[Pydantic schema validation]
+  D -->|valid| E[Persist completed AnalysisRun]
+  E --> F[Create criteria rows]
+  D -->|invalid JSON/schema| G[Persist failed AnalysisRun]
+  G --> H[Return safe 502 without raw model output]
+```
+
+Current scope:
+
+- `server/services/llm_gateway.py` validates JSON with Pydantic and records completed or failed analysis runs.
+- `server/services/analysis_schemas.py` defines structured criteria, evidence, and readiness contracts.
+- Criteria extraction has an opt-in LLM branch behind `PRIORAUTH_ANALYSIS_MODE=llm`; deterministic extraction stays active by default.
+- Failed structured output stores schema/error metadata only. Raw PDF text and raw model output are not stored in failure metadata.
+
+Remaining Phase 4 work:
+
+- Add the provider call implementation behind the gateway boundary.
+- Extend the opt-in branch to evidence matching and readiness reports.
+- Expand the eval runner from smoke checks into expected criteria, evidence statuses, missing-item, and prompt-injection outcome checks.
 
 ## Prior-Auth Workflow
 
@@ -205,6 +236,8 @@ Backend variables:
 | `MAX_UPLOAD_MB` | No | Upload size limit in megabytes. |
 | `MAX_UPLOAD_FILES` | No | Maximum uploaded files per request. |
 | `ENVIRONMENT` | No | Use `local`, `preview`, `test`, or `production`. |
+| `PRIORAUTH_ANALYSIS_MODE` | No | Defaults to deterministic analysis. Set to `llm` only for structured-output experiments. |
+| `PRIORAUTH_LLM_MODEL` | No | Metadata label for structured analysis runs. |
 
 Client variables:
 
@@ -251,6 +284,7 @@ Focused PRD guardrails:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest tests.test_phase7_eval_gate
+.\.venv\Scripts\python.exe -m unittest tests.test_llm_gateway
 .\.venv\Scripts\python.exe -m unittest tests.test_priorauth_workflow.PriorAuthWorkflowTests.test_cross_tenant_direct_id_routes_are_denied
 ```
 
@@ -290,6 +324,30 @@ CircleCI runs independent backend and client jobs:
 
 Dependency caches are optimizations only. A cache miss should still produce a clean install and test run.
 
+## Multi-Agent Implementation Architecture
+
+Implementation work is tracked in `tasks/todo.md` and phase plans under `docs/superpowers/plans/`. The workflow uses scoped agents for discovery, implementation, review, and verification rather than one broad pass.
+
+```mermaid
+flowchart LR
+  Main[Codex coordinator] --> Plan[Phase plan and checklist]
+  Main --> Explorer[Explorer agents]
+  Main --> Worker[Implementation workers]
+  Main --> Reviewer[Spec and security reviewers]
+  Explorer --> Evidence[Repo map and gap reports]
+  Worker --> Patch[Scoped code changes]
+  Reviewer --> Findings[Review findings]
+  Findings --> Main
+  Patch --> Verify[Backend/client verification]
+```
+
+Agent roles:
+
+- Explorer agents map current code, tests, and gaps without editing.
+- Worker slices stay scoped to one backend, client, eval, or docs surface.
+- Reviewer agents check spec compliance, security, tenant isolation, and product-safety language before a phase is considered stable.
+- The main coordinator owns final integration, verification commands, and README/task updates.
+
 ## Roadmap
 
 Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans/2026-06-18-next-prd-phases.md`:
@@ -298,7 +356,7 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
 3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
 4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
-5. Phase 4 - Next: add structured LLM gateway and expanded eval runner.
+5. Phase 4 - In progress: structured LLM gateway foundation and opt-in criteria branch are implemented; evidence/readiness LLM branches and expanded eval scoring remain.
 6. Phase 5 - Harden auth/session behavior, security scans, CI, and deployment gates.
 
 Deferred capabilities include OCR fallback, async processing workers, object storage, admin analytics, EHR/FHIR integration, payer submission, and real PHI production readiness.

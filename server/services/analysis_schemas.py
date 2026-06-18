@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class StructuredCriterion(BaseModel):
@@ -33,6 +33,14 @@ class StructuredEvidenceMatch(BaseModel):
     conflicting_evidence: list[str] = Field(default_factory=list)
     recommended_action: str = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def met_requires_source_citation(self):
+        if self.status == "met" and not all(
+            value.strip() for value in [self.source_quote, self.source_file, self.source_page, self.why_it_matters]
+        ):
+            raise ValueError("met evidence requires source quote, file, page, and rationale")
+        return self
 
 
 class EvidenceMatchingOutput(BaseModel):
