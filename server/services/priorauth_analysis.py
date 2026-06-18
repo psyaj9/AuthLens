@@ -234,7 +234,7 @@ def _extract_criteria_with_llm(
     organization_id: str,
     user_id: str,
 ) -> list[PolicyCriterion]:
-    model_version = os.getenv("PRIORAUTH_LLM_MODEL", "structured-llm")
+    model_version = llm_gateway.resolve_structured_model()
     prompt = llm_gateway.build_structured_prompt(
         task="Extract payer policy criteria for a prior authorization evidence checklist.",
         schema_name=CriteriaExtractionOutput.__name__,

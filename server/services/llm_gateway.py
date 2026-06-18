@@ -45,6 +45,14 @@ def _schema_response_format(schema: type[BaseModel], schema_name: str) -> dict:
     }
 
 
+def resolve_structured_model() -> str:
+    return (
+        os.getenv("PRIORAUTH_LLM_MODEL", "").strip()
+        or os.getenv("GROQ_MODEL", "").strip()
+        or DEFAULT_STRUCTURED_MODEL
+    )
+
+
 def generate_structured_output(
     prompt: str,
     *,
@@ -57,7 +65,7 @@ def generate_structured_output(
     if not api_key:
         raise StructuredOutputError("structured output provider is not configured")
     resolved_schema_name = schema_name or schema.__name__
-    model = os.getenv("PRIORAUTH_LLM_MODEL") or os.getenv("GROQ_MODEL") or DEFAULT_STRUCTURED_MODEL
+    model = resolve_structured_model()
     try:
         client = Groq(api_key=api_key)
         completion = client.chat.completions.create(
@@ -76,13 +84,17 @@ def generate_structured_output(
             max_tokens=_max_tokens(),
             response_format=_schema_response_format(schema, resolved_schema_name),
         )
-    except Exception as exc:
-        raise StructuredOutputError("structured output provider request failed") from exc
+    except Exception:
+        raise StructuredOutputError("structured output provider request failed") from None
 
     choices = getattr(completion, "choices", None)
     if not choices:
         raise StructuredOutputError("structured output provider returned no content")
-    message = getattr(choices[0], "message", None)
+    choice = choices[0]
+    finish_reason = getattr(choice, "finish_reason", None)
+    if finish_reason == "length":
+        raise StructuredOutputError("structured output provider returned incomplete content")
+    message = getattr(choice, "message", None)
     content = getattr(message, "content", None)
     if not isinstance(content, str) or not content.strip():
         raise StructuredOutputError("structured output provider returned no content")
@@ -96,8 +108,8 @@ def structured_analysis_enabled() -> bool:
 def parse_structured_output(model: type[ModelT], raw_text: str) -> ModelT:
     try:
         return model.model_validate_json(raw_text)
-    except ValidationError as exc:
-        raise StructuredOutputValidationError(STRUCTURED_OUTPUT_ERROR) from exc
+    except ValidationError:
+        raise StructuredOutputValidationError(STRUCTURED_OUTPUT_ERROR) from None
 
 
 def parse_structured_output_with_run(
@@ -122,7 +134,7 @@ def parse_structured_output_with_run(
             metadata_json={
                 "schema": model.__name__,
                 "error": STRUCTURED_OUTPUT_ERROR,
-                "error_type": type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__,
+                "error_type": type(exc).__name__,
             },
         )
         db.add(run)

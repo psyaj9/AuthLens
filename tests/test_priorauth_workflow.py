@@ -621,6 +621,74 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(run.metadata_json["analysis_mode"], "llm")
         self.assertEqual(run.metadata_json["criteria_count"], 1)
 
+    def test_llm_criteria_completed_run_records_resolved_model_version(self):
+        client = self._client()
+        coordinator_token = self._login(client)
+        case_id = self._create_case(client, coordinator_token, "SYN-LMRI-LLM-MODEL")
+        self._upload_document(
+            client,
+            coordinator_token,
+            case_id,
+            "payer_policy",
+            "policy.pdf",
+            b"%PDF-1.4\nCoverage requires six weeks of conservative therapy.",
+        )
+        llm_gateway = importlib.import_module("services.llm_gateway")
+        original_env = {
+            "PRIORAUTH_ANALYSIS_MODE": os.environ.get("PRIORAUTH_ANALYSIS_MODE"),
+            "PRIORAUTH_LLM_MODEL": os.environ.get("PRIORAUTH_LLM_MODEL"),
+            "GROQ_MODEL": os.environ.get("GROQ_MODEL"),
+        }
+        os.environ["PRIORAUTH_ANALYSIS_MODE"] = "llm"
+        os.environ["PRIORAUTH_LLM_MODEL"] = ""
+        os.environ["GROQ_MODEL"] = "llama-3.3-70b-versatile"
+        raw_output = """
+        {
+          "criteria": [
+            {
+              "criterion_code": "C1",
+              "criterion_type": "documentation",
+              "requirement": "Document six weeks of conservative therapy.",
+              "required_evidence": ["Therapy dates"],
+              "is_required": true,
+              "source_quote": "Coverage requires six weeks of conservative therapy.",
+              "source_file": "policy.pdf",
+              "source_page": "1",
+              "confidence": 0.82,
+              "ambiguity_notes": []
+            }
+          ],
+          "missing_or_ambiguous_policy_info": []
+        }
+        """
+        try:
+            with patch.object(llm_gateway, "generate_structured_output", return_value=raw_output):
+                response = client.post(
+                    f"/api/cases/{case_id}/criteria/extract",
+                    headers={"Authorization": f"Bearer {coordinator_token}"},
+                )
+        finally:
+            for key, value in original_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertEqual(response.status_code, 200, response.text)
+
+        session = importlib.import_module("db.session")
+        models = importlib.import_module("models.priorauth")
+        sqlalchemy = importlib.import_module("sqlalchemy")
+        with session.SessionLocal() as db:
+            run = db.scalar(
+                sqlalchemy.select(models.AnalysisRun).where(
+                    models.AnalysisRun.case_id == case_id,
+                    models.AnalysisRun.run_type == "criteria_extraction",
+                )
+            )
+
+        self.assertEqual(run.model_version, "llama-3.3-70b-versatile")
+
     def test_llm_criteria_extraction_rejects_ungrounded_citations_without_wiping_existing_criteria(self):
         client = self._client()
         coordinator_token = self._login(client)

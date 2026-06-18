@@ -31,7 +31,8 @@
   - [x] Add tests for the Groq JSON-schema request boundary and direct SDK dependency.
   - [x] Implement `generate_structured_output` through the Groq SDK while preserving fail-closed behavior and redacted errors.
   - [x] Update README/env docs for the real structured provider path.
-  - [ ] Verify focused gateway tests, backend discovery, client gates, and review findings.
+  - [x] Verify focused gateway tests, backend discovery, client gates, and review findings.
+- Phase 4 provider-boundary verification passed: focused gateway/deployment/criteria tests passed 24 tests, backend unittest discovery passed 88 tests, client lint/typecheck passed, Vitest passed 47 tests across 10 files, Next production build passed, and Playwright desktop/mobile e2e passed 8 tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

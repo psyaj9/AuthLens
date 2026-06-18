@@ -255,6 +255,56 @@ class LlmGatewayTests(unittest.TestCase):
 
         self.assertNotIn("Coverage requires", str(raised.exception))
         self.assertIn("provider request failed", str(raised.exception))
+        self.assertIsNone(raised.exception.__cause__)
+
+    def test_parse_structured_output_validation_error_does_not_chain_raw_model_output(self):
+        gateway = self._gateway()
+
+        with self.assertRaises(gateway.StructuredOutputValidationError) as raised:
+            gateway.parse_structured_output(
+                StructuredCriteriaOutput,
+                """
+                {
+                  "criteria": [
+                    {
+                      "criterion_code": "C1",
+                      "requirement": "Coverage requires six weeks of conservative therapy.",
+                      "required_evidence": ["Therapy dates"],
+                      "confidence": 1.5
+                    }
+                  ]
+                }
+                """,
+            )
+
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertNotIn("Coverage requires", str(raised.exception))
+
+    def test_generate_structured_output_length_finished_completion_fails_closed(self):
+        gateway = self._gateway()
+
+        class LengthFinishedCompletions:
+            def create(self, **_kwargs):
+                return SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            finish_reason="length",
+                            message=SimpleNamespace(content='{"criteria": []}'),
+                        )
+                    ]
+                )
+
+        class LengthFinishedGroq:
+            def __init__(self, *, api_key):
+                self.chat = SimpleNamespace(completions=LengthFinishedCompletions())
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-groq-key"}), patch.object(
+            gateway, "Groq", LengthFinishedGroq
+        ):
+            with self.assertRaises(gateway.StructuredOutputError) as raised:
+                gateway.generate_structured_output("Extract criteria.", schema=StructuredCriteriaOutput)
+
+        self.assertIn("incomplete", str(raised.exception))
 
     def test_generate_structured_output_missing_api_key_fails_without_provider_call(self):
         gateway = self._gateway()
