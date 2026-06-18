@@ -22,7 +22,6 @@ def upgrade() -> None:
         "users",
         sa.Column("token_version", sa.Integer(), nullable=False, server_default="0"),
     )
-    op.alter_column("users", "token_version", server_default=None)
 
 
 def downgrade() -> None:

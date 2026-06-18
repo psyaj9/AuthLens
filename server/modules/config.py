@@ -9,6 +9,7 @@ DEFAULT_ALLOWED_ORIGINS = [
 
 DEFAULT_MAX_UPLOAD_FILES = 5
 DEFAULT_MAX_UPLOAD_MB = 10.0
+PRODUCTION_PASSWORD_RESET_DELIVERY_MODES = {"email", "external"}
 
 
 def get_environment() -> str:
@@ -61,6 +62,16 @@ def get_internal_api_token() -> str | None:
 
     token = token.strip()
     return token or None
+
+
+def get_password_reset_delivery_mode() -> str:
+    return os.getenv("PASSWORD_RESET_DELIVERY_MODE", "").strip().lower()
+
+
+def password_reset_delivery_configured() -> bool:
+    if not is_production():
+        return True
+    return get_password_reset_delivery_mode() in PRODUCTION_PASSWORD_RESET_DELIVERY_MODES
 
 
 def _parse_int_env(name: str, default: int) -> int:

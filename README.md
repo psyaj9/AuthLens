@@ -29,7 +29,7 @@ The prior-auth workflow is organized around an organization-owned case:
 
 Implemented:
 
-- Self-service registration, login, forgot-password, reset-password, JWT auth, RBAC, and organization isolation.
+- Self-service registration, login, forgot-password, reset-password, JWT auth with reset-driven token invalidation, RBAC, and organization isolation.
 - SQLAlchemy and Alembic persistence with SQLite for local/tests and Postgres-compatible deployment.
 - Organization-scoped cases, typed documents, document pages, document chunks, analysis runs, criteria, evidence matches, readiness reports, drafts, citation checks, and audit events.
 - Pinecone vector indexing for uploaded PDF chunks, with database records as the source of truth.
@@ -71,6 +71,7 @@ Design rules:
 - Browser calls go through Next.js route handlers. `BACKEND_API_URL` stays server-side in the client app.
 - Backend routes enforce JWT auth, role checks, and `organization_id` filtering.
 - Production config fails closed for missing `JWT_SECRET`, invalid CORS configuration, and internal-token mismatches.
+- Password resets increment a per-user token version, so access tokens issued before the reset are rejected on subsequent authenticated requests.
 
 ## Structured LLM Gateway
 
@@ -362,6 +363,6 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
 4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
 5. Phase 4 - In progress: structured Groq provider boundary, opt-in criteria/evidence/readiness branches, and expanded smoke-eval scoring are implemented; larger PRD eval dataset growth remains.
-6. Phase 5 - Harden auth/session behavior, security scans, CI, and deployment gates.
+6. Phase 5 - In progress: password-reset session invalidation is implemented; security scans, CI, and deployment gates remain.
 
 Deferred capabilities include OCR fallback, async processing workers, object storage, admin analytics, EHR/FHIR integration, payer submission, and real PHI production readiness.

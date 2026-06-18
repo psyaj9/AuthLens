@@ -9,7 +9,7 @@ from db.session import get_db
 from dependencies.auth import CurrentUser, get_current_user
 from models.priorauth import Organization, OrganizationMembership, PasswordResetToken, User
 from modules.auth import create_access_token, hash_password, hash_reset_token, verify_password
-from modules.config import is_production
+from modules.config import is_production, password_reset_delivery_configured
 from modules.schemas import (
     AuthResponse,
     ForgotPasswordRequest,
@@ -125,6 +125,12 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/auth/forgot-password", response_model=ForgotPasswordResponse)
 async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    if is_production() and not password_reset_delivery_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset delivery is not configured",
+        )
+
     reset_token = None
     user = db.scalar(select(User).where(User.email == normalize_email(payload.email)))
     if user is not None and user.is_active:

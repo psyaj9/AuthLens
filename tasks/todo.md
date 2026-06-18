@@ -48,6 +48,12 @@
   - [x] Update README and task tracker for implemented smoke-set scoring and remaining PRD dataset growth.
   - [x] Verify focused eval gate and backend discovery.
 - Phase 4 expanded eval scoring verification passed: `tests.test_phase7_eval_gate` passed 3 tests, focused eval/gateway/workflow verification passed 55 tests, and backend unittest discovery passed 99 tests.
+- Current Phase 5 auth/session hardening slice:
+  - [x] Add token-version invalidation so password reset rejects pre-reset access tokens.
+  - [x] Add Alembic migration `20260618_0004_user_token_version`.
+  - [x] Update README and task tracker for reset-driven session invalidation.
+  - [x] Verify focused auth tests and migration smoke.
+- Phase 5 auth/session verification passed: password-reset access-token invalidation and adjacent reset tests passed 3 tests, deployment/auth focused verification passed 5 tests, Alembic upgrade smoke reached `20260618_0004` on a fresh temporary SQLite database, and backend unittest discovery passed 100 tests.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.
