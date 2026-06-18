@@ -2,15 +2,19 @@
 
 ## Production UI Polish And PDF Export Pass
 
-- [ ] Add focused regression tests for PDF exports, case archive/delete client flow, and user-facing label formatting.
-- [ ] Implement backend PDF export download and update export metadata/UI copy.
-- [ ] Add case deletion from the work queue and normalize raw status/score labels in the workspace.
-- [ ] Improve generated text completeness/readability where truncation is visible.
-- [ ] Run backend/client verification and browser render checks.
+- [x] Add focused regression tests for PDF exports, case archive/delete client flow, and user-facing label formatting.
+- [x] Implement backend PDF export download and update export metadata/UI copy.
+- [x] Add case deletion from the work queue and normalize raw status/score labels in the workspace.
+- [x] Improve generated text completeness/readability where truncation is visible.
+- [x] Run backend/client verification and browser render checks.
 
 ## Review
 
-- Pending.
+- Replaced markdown export artifacts with PDF metadata and PDF download rendering while keeping markdown as the persisted source text for auditability.
+- Added archive-backed case deletion in the workspace through the existing FastAPI `/api/cases/{case_id}/archive` endpoint and a new Next proxy route.
+- Normalized visible machine values such as `not_found`, `prior_auth`, `reviewed`, `indexed`, and `exported` into staff-readable labels.
+- Removed deterministic criteria required-evidence truncation so long extracted criteria text is preserved for review.
+- Verification passed: focused backend/client regressions, full backend unittest discovery, client lint/typecheck/unit/build/e2e, PDF parse smoke, and Playwright-rendered UI smoke for PDF export labels and delete behavior.
 
 ## Production Auth Token Parse Bug
 
