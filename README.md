@@ -96,41 +96,6 @@ Retrieval isolation:
 - Evidence status `met` is invalid without source quote, source file, source page, and rationale.
 - Drafts must use verified evidence and keep the human-review disclaimer.
 
-## Multi-Agent Implementation Architecture
-
-The product runtime is not an autonomous clinical agent system. Runtime behavior is intentionally service-based, audited, and bounded by schema checks and human review.
-
-The implementation workflow uses multi-agent engineering orchestration:
-
-```mermaid
-flowchart TD
-  Lead[Codex lead agent] --> Plan[Phase plan and task checklist]
-  Lead --> Explorer[Explorer agents]
-  Lead --> Workers[Worker agents]
-  Lead --> Reviewers[Reviewer agents]
-  Explorer --> RepoMap[Repo mapping and spec gaps]
-  Workers --> Backend[Backend slices]
-  Workers --> Frontend[Frontend slices]
-  Workers --> Eval[Eval and test slices]
-  Reviewers --> Security[Security and tenant review]
-  Reviewers --> ProductSafety[Product-safety review]
-  Reviewers --> CodeReview[Final code review]
-  Backend --> Verification[Verification gate]
-  Frontend --> Verification
-  Eval --> Verification
-  Security --> Verification
-```
-
-Current phase routing:
-
-- Eval worker: `server/evals/run_synthetic_eval.py`, synthetic fixtures, red-team outcomes.
-- Backend security worker: direct-ID tenant-isolation matrix and route guard review.
-- Frontend reviewer worker: reviewer controls and client proxy/API tests.
-- Export worker: persisted export artifacts, download APIs, and packet manifests.
-- Appeal worker: denial-letter extraction and appeal draft workflow.
-- LLM gateway worker: structured output parsing, schema validation, and fail-closed runs.
-- Security/deployment worker: production env gates, audits, Render/Vercel verification, and CI.
-
 ## Project Layout
 
 - `server/` - FastAPI app, routers, services, SQLAlchemy models, Alembic entrypoint, Pinecone and LLM modules.
@@ -324,8 +289,8 @@ Dependency caches are optimizations only. A cache miss should still produce a cl
 
 Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans/2026-06-18-next-prd-phases.md`:
 
-1. Phase 0 - Complete executable eval and tenant-isolation guardrails.
-2. Phase 1 - Complete reviewer workspace controls.
+1. Phase 0 - Implemented: executable eval and tenant-isolation guardrails.
+2. Phase 1 - Next: complete reviewer workspace controls.
 3. Phase 2 - Add readiness, letter, and packet exports.
 4. Phase 3 - Implement denial-letter appeal workflow.
 5. Phase 4 - Add structured LLM gateway and expanded eval runner.

@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  approveDraft,
   askQuestion,
   AuthLensApiError,
   forgotPassword,
+  overrideEvidenceMatch,
   registerUser,
   resetPassword,
+  updateCriterion,
+  updateDraft,
   uploadDocuments
 } from "./client";
 
@@ -138,6 +142,125 @@ describe("client API client", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reset_token: "reset-token", password: "new-password" })
       })
+    );
+  });
+
+  it("updates criteria review state through the local route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        id: "crit_123",
+        criterion_code: "C1",
+        criterion_type: "documentation",
+        requirement: "Updated criterion",
+        required_evidence: ["Therapy dates"],
+        is_required: true,
+        source_file: "policy.pdf",
+        source_page: "1",
+        source_quote: "Original payer criterion",
+        confidence: 0.82,
+        ambiguity_notes: [],
+        reviewer_status: "reviewed"
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await updateCriterion("crit_123", {
+      requirement: "Updated criterion",
+      required_evidence: ["Therapy dates"],
+      reviewer_status: "reviewed"
+    });
+
+    expect(result.reviewer_status).toBe("reviewed");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/criteria/crit_123",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requirement: "Updated criterion",
+          required_evidence: ["Therapy dates"],
+          reviewer_status: "reviewed"
+        })
+      })
+    );
+  });
+
+  it("saves evidence reviewer overrides through the local route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        id: "match_123",
+        criterion_id: "crit_123",
+        status: "met",
+        evidence_summary: "Patient note supports the criterion.",
+        source_file: "note.pdf",
+        source_page: "2",
+        source_quote: "Six weeks of therapy are documented.",
+        why_it_matters: "Reviewer should confirm the citation.",
+        missing_evidence: [],
+        conflicting_evidence: [],
+        recommended_action: "Review citation.",
+        confidence: 0.8,
+        reviewer_override_status: "not_met",
+        reviewer_override_reason: "Citation does not satisfy policy"
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await overrideEvidenceMatch("match_123", {
+      reviewer_override_status: "not_met",
+      reviewer_override_reason: "Citation does not satisfy policy"
+    });
+
+    expect(result.reviewer_override_status).toBe("not_met");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/evidence-matches/match_123",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewer_override_status: "not_met",
+          reviewer_override_reason: "Citation does not satisfy policy"
+        })
+      })
+    );
+  });
+
+  it("edits and approves drafts through local routes", async () => {
+    const draftPayload = {
+      id: "draft_123",
+      case_id: "case_123",
+      letter_type: "prior_auth",
+      status: "needs_revision",
+      content_markdown: "Edited draft",
+      created_by: "ai",
+      approved_at: null,
+      created_at: "2026-06-18T00:00:00Z",
+      updated_at: "2026-06-18T00:00:00Z"
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(draftPayload))
+      .mockResolvedValueOnce(Response.json({ ...draftPayload, status: "approved" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const editedDraft = await updateDraft("draft_123", "Edited draft");
+    const approvedDraft = await approveDraft("draft_123");
+
+    expect(editedDraft.content_markdown).toBe("Edited draft");
+    expect(approvedDraft.status).toBe("approved");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/drafts/draft_123",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content_markdown: "Edited draft" })
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/drafts/draft_123/approve",
+      expect.objectContaining({ method: "POST" })
     );
   });
 });

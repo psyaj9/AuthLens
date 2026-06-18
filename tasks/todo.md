@@ -1,14 +1,20 @@
 # Next PRD Implementation Phases
 
-- [ ] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
+- [x] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
 - [ ] Execute Phase 1: reviewer workspace completion.
 - [ ] Execute Phase 2: export artifacts, download APIs, and packet manifest.
 - [ ] Execute Phase 3: appeal workflow with denial-letter extraction.
 - [ ] Execute Phase 4: structured LLM gateway and expanded eval runner.
 - [ ] Execute Phase 5: production-readiness hardening, security scan, and deployment gates.
+- [x] Update `README.md` so it reflects the PriorAuth Evidence Copilot product, runtime architecture, multi-agent implementation architecture, setup, verification, deployment, and roadmap.
 
 ## Review
 
+- Phase 0 guardrails are now implemented: `server/evals/run_synthetic_eval.py` executes the synthetic golden cases, fixture document bodies support offline smoke runs, draft safety is asserted, and focused eval tests pass.
+- Added cross-tenant direct-ID coverage across cases, documents, criteria, evidence, reports, drafts, citation verification, approval, and audit routes.
+- Fixed `/api/cases/{case_id}/drafts/appeal` so the deferred route performs auth and organization-scoped case lookup before returning `501`.
+- Added defense-in-depth organization filters for child-row summary/delete paths and a regression test proving mismatched child-row tenants do not affect case summaries.
+- Updated `README.md` around the current prior-auth workspace, including architecture diagrams, multi-agent implementation workflow, test commands, deployment notes, and remaining phases.
 - Planning complete. Detailed execution plan is saved at `docs/superpowers/plans/2026-06-18-next-prd-phases.md`.
 - Backend explorer recommended export APIs as the next backend slice: `server/routes/exports.py`, `server/services/exports.py`, `ExportArtifact`, Alembic migration, and export/download tests.
 - Frontend explorer recommended reviewer UX first: criteria edits, evidence overrides, draft edit/verify/approve, audit views, then export UI.

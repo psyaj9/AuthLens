@@ -2,11 +2,13 @@
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  CheckCircle2,
   ClipboardCheck,
   FileSearch,
   FileText,
   LogOut,
   Plus,
+  Save,
   ShieldCheck,
   UploadCloud
 } from "lucide-react";
@@ -15,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { StatusPill } from "@/components/ui/status-pill";
 import {
+  approveDraft,
   createCase,
   createPriorAuthDraft,
   extractCriteria,
@@ -29,8 +32,11 @@ import {
   loginUser,
   logoutUser,
   matchEvidence,
+  overrideEvidenceMatch,
   registerUser,
   resetPassword,
+  updateCriterion,
+  updateDraft,
   uploadCaseDocument,
   verifyDraftCitations
 } from "@/lib/api/client";
@@ -48,6 +54,15 @@ import type {
 type AsyncStatus = "idle" | "loading" | "success" | "error";
 type AuthMode = "login" | "register" | "forgot" | "reset";
 type WorkflowTab = "documents" | "criteria" | "evidence" | "readiness" | "draft";
+type CriterionEdit = {
+  requirement: string;
+  requiredEvidenceText: string;
+  reviewerStatus: string;
+};
+type EvidenceOverrideEdit = {
+  status: "met" | "unclear" | "not_found" | "not_met";
+  reason: string;
+};
 
 const documentTypes = [
   ["payer_policy", "Payer policy"],
@@ -83,6 +98,24 @@ function statusTone(status: string) {
     return "error";
   }
   return "idle";
+}
+
+function listToText(items: string[]) {
+  return items.join("\n");
+}
+
+function textToList(value: string) {
+  return value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function citationIssueText(item: Record<string, unknown>) {
+  const issue = typeof item.issue === "string" ? item.issue : undefined;
+  const claim = typeof item.claim === "string" ? item.claim : undefined;
+  const citation = typeof item.citation === "string" ? item.citation : undefined;
+  return [claim ?? citation, issue].filter(Boolean).join(": ") || JSON.stringify(item);
 }
 
 async function loadCaseArtifacts(caseId: string) {
@@ -283,9 +316,12 @@ export function PriorAuthWorkspace() {
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [citationCheck, setCitationCheck] = useState<CitationCheck | null>(null);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
+  const [criterionEdits, setCriterionEdits] = useState<Record<string, CriterionEdit>>({});
   const [documents, setDocuments] = useState<CaseDocument[]>([]);
   const [drafts, setDrafts] = useState<DraftLetter[]>([]);
+  const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
   const [evidence, setEvidence] = useState<EvidenceMatch[]>([]);
+  const [evidenceOverrides, setEvidenceOverrides] = useState<Record<string, EvidenceOverrideEdit>>({});
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState("payer_policy");
   const [message, setMessage] = useState<string>();
@@ -311,6 +347,7 @@ export function PriorAuthWorkspace() {
     setCriteria(nextArtifacts.criteria);
     setEvidence(nextArtifacts.evidence);
     setDrafts(nextArtifacts.drafts);
+    setCitationCheck(null);
   }, []);
 
   useEffect(() => {
@@ -338,6 +375,7 @@ export function PriorAuthWorkspace() {
         setCriteria(nextArtifacts.criteria);
         setEvidence(nextArtifacts.evidence);
         setDrafts(nextArtifacts.drafts);
+        setCitationCheck(null);
       });
 
       return () => {
@@ -426,6 +464,7 @@ export function PriorAuthWorkspace() {
     if (!selectedCase) return;
     void runAction(async () => {
       setCriteria(await extractCriteria(selectedCase.id));
+      setCriterionEdits({});
       await refreshCases();
     }, "Criteria extracted from payer policy.");
   }
@@ -434,6 +473,7 @@ export function PriorAuthWorkspace() {
     if (!selectedCase) return;
     void runAction(async () => {
       setEvidence(await matchEvidence(selectedCase.id));
+      setEvidenceOverrides({});
       await refreshCases();
     }, "Evidence matched against criteria.");
   }
@@ -451,6 +491,8 @@ export function PriorAuthWorkspace() {
     void runAction(async () => {
       const draft = await createPriorAuthDraft(selectedCase.id);
       setDrafts([draft, ...drafts.filter((item) => item.id !== draft.id)]);
+      setDraftEdits((current) => ({ ...current, [draft.id]: draft.content_markdown }));
+      setCitationCheck(null);
     }, "Prior authorization draft generated.");
   }
 
@@ -458,6 +500,91 @@ export function PriorAuthWorkspace() {
     void runAction(async () => {
       setCitationCheck(await verifyDraftCitations(draftId));
     }, "Citation verification completed.");
+  }
+
+  function criterionEdit(criterion: Criterion): CriterionEdit {
+    return criterionEdits[criterion.id] ?? {
+      requirement: criterion.requirement,
+      requiredEvidenceText: listToText(criterion.required_evidence),
+      reviewerStatus: criterion.reviewer_status
+    };
+  }
+
+  function setCriterionEdit(criterion: Criterion, changes: Partial<CriterionEdit>) {
+    setCriterionEdits((current) => ({
+      ...current,
+      [criterion.id]: { ...criterionEdit(criterion), ...changes }
+    }));
+  }
+
+  function handleSaveCriterionReview(criterion: Criterion) {
+    const edit = criterionEdit(criterion);
+    void runAction(async () => {
+      const updated = await updateCriterion(criterion.id, {
+        requirement: edit.requirement,
+        required_evidence: textToList(edit.requiredEvidenceText),
+        reviewer_status: edit.reviewerStatus
+      });
+      setCriteria((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setCriterionEdits((current) => {
+        const next = { ...current };
+        delete next[updated.id];
+        return next;
+      });
+    }, "Criterion review saved.");
+  }
+
+  function evidenceOverride(match: EvidenceMatch): EvidenceOverrideEdit {
+    return evidenceOverrides[match.id] ?? {
+      status: (match.reviewer_override_status ?? match.status) as EvidenceOverrideEdit["status"],
+      reason: match.reviewer_override_reason ?? ""
+    };
+  }
+
+  function setEvidenceOverride(match: EvidenceMatch, changes: Partial<EvidenceOverrideEdit>) {
+    setEvidenceOverrides((current) => ({
+      ...current,
+      [match.id]: { ...evidenceOverride(match), ...changes }
+    }));
+  }
+
+  function handleSaveEvidenceOverride(match: EvidenceMatch) {
+    const override = evidenceOverride(match);
+    void runAction(async () => {
+      const updated = await overrideEvidenceMatch(match.id, {
+        reviewer_override_status: override.status,
+        reviewer_override_reason: override.reason.trim()
+      });
+      setEvidence((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setEvidenceOverrides((current) => {
+        const next = { ...current };
+        delete next[updated.id];
+        return next;
+      });
+      await refreshCases();
+    }, "Evidence override saved.");
+  }
+
+  function draftEdit(draft: DraftLetter) {
+    return draftEdits[draft.id] ?? draft.content_markdown;
+  }
+
+  function handleSaveDraftEdits(draft: DraftLetter) {
+    const content = draftEdit(draft);
+    void runAction(async () => {
+      const updated = await updateDraft(draft.id, content);
+      setDrafts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setDraftEdits((current) => ({ ...current, [updated.id]: updated.content_markdown }));
+      setCitationCheck(null);
+    }, "Draft edits saved.");
+  }
+
+  function handleApproveDraft(draft: DraftLetter) {
+    void runAction(async () => {
+      const updated = await approveDraft(draft.id);
+      setDrafts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      await refreshCases();
+    }, "Draft approved.");
   }
 
   if (!user) {
@@ -632,14 +759,65 @@ export function PriorAuthWorkspace() {
             {activeTab === "criteria" ? (
               <Panel labelledBy="criteria-heading">
                 <PanelHeader action={<Button disabled={!selectedCase} onClick={handleExtractCriteria}><FileSearch aria-hidden className="h-4 w-4" />Extract</Button>} id="criteria-heading" title="Criteria Checklist" />
-                <div className="divide-y divide-[var(--border)] p-4">
-                  {criteria.map((criterion) => (
-                    <div className="grid gap-2 py-3 lg:grid-cols-[96px_minmax(0,1fr)_160px]" key={criterion.id}>
-                      <span className="text-sm font-semibold">{criterion.criterion_code}</span>
-                      <p className="text-sm leading-6">{criterion.requirement}</p>
-                      <span className="text-xs text-[var(--muted)]">{criterion.source_file}, page {criterion.source_page}</span>
+                <div className="flex flex-col gap-4 p-4">
+                  {criteria.map((criterion) => {
+                    const edit = criterionEdit(criterion);
+                    return (
+                      <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb] p-4" key={criterion.id}>
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold">{criterion.criterion_code}</span>
+                            <StatusPill tone={statusTone(criterion.reviewer_status)}>{criterion.reviewer_status}</StatusPill>
+                          </div>
+                          <span className="text-xs text-[var(--muted)]">{criterion.source_file}, page {criterion.source_page}</span>
+                        </div>
+                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_180px]">
+                          <label className="flex flex-col gap-2 text-sm font-semibold">
+                            Requirement
+                            <textarea
+                              className="min-h-28 resize-y rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-[var(--accent)]"
+                              onChange={(event) => setCriterionEdit(criterion, { requirement: event.target.value })}
+                              value={edit.requirement}
+                            />
+                          </label>
+                          <label className="flex flex-col gap-2 text-sm font-semibold">
+                            Required evidence
+                            <textarea
+                              className="min-h-28 resize-y rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-[var(--accent)]"
+                              onChange={(event) => setCriterionEdit(criterion, { requiredEvidenceText: event.target.value })}
+                              value={edit.requiredEvidenceText}
+                            />
+                          </label>
+                          <div className="flex flex-col gap-3">
+                            <label className="flex flex-col gap-2 text-sm font-semibold">
+                              Review status
+                              <select
+                                className="min-h-10 rounded-md border border-[var(--border)] bg-white px-3 text-sm font-normal"
+                                onChange={(event) => setCriterionEdit(criterion, { reviewerStatus: event.target.value })}
+                                value={edit.reviewerStatus}
+                              >
+                                <option value="unreviewed">Unreviewed</option>
+                                <option value="reviewed">Reviewed</option>
+                                <option value="needs_revision">Needs revision</option>
+                              </select>
+                            </label>
+                            <Button onClick={() => handleSaveCriterionReview(criterion)}>
+                              <Save aria-hidden className="h-4 w-4" />
+                              Save criterion review
+                            </Button>
+                          </div>
+                        </div>
+                        <blockquote className="mt-3 rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--muted)]">
+                          {criterion.source_quote}
+                        </blockquote>
+                      </div>
+                    );
+                  })}
+                  {criteria.length === 0 ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb] p-4 text-sm text-[var(--muted)]">
+                      No extracted criteria yet.
                     </div>
-                  ))}
+                  ) : null}
                 </div>
               </Panel>
             ) : null}
@@ -647,27 +825,64 @@ export function PriorAuthWorkspace() {
             {activeTab === "evidence" ? (
               <Panel labelledBy="evidence-heading">
                 <PanelHeader action={<Button disabled={!selectedCase || criteria.length === 0} onClick={handleMatchEvidence}><FileSearch aria-hidden className="h-4 w-4" />Match</Button>} id="evidence-heading" title="Evidence Matching" />
-                <div className="overflow-x-auto p-4">
-                  <table className="w-full min-w-[860px] border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b border-[var(--border)] text-left text-xs uppercase text-[var(--muted)]">
-                        <th className="py-2 pr-3">Status</th>
-                        <th className="py-2 pr-3">Summary</th>
-                        <th className="py-2 pr-3">Quote</th>
-                        <th className="py-2 pr-3">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {evidence.map((match) => (
-                        <tr className="border-b border-[var(--border)] align-top" key={match.id}>
-                          <td className="py-3 pr-3"><StatusPill tone={statusTone(match.status)}>{match.status}</StatusPill></td>
-                          <td className="py-3 pr-3">{match.evidence_summary}</td>
-                          <td className="py-3 pr-3 text-[var(--muted)]">{match.source_quote || "No source quote"} {match.source_file ? `(${match.source_file}, page ${match.source_page})` : ""}</td>
-                          <td className="py-3 pr-3">{match.recommended_action}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="flex flex-col gap-4 p-4">
+                  {evidence.map((match) => {
+                    const override = evidenceOverride(match);
+                    const effectiveStatus = match.reviewer_override_status ?? match.status;
+                    return (
+                      <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb] p-4" key={match.id}>
+                        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                          <div className="flex flex-col gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <StatusPill tone={statusTone(effectiveStatus)}>{effectiveStatus}</StatusPill>
+                              {match.reviewer_override_status ? (
+                                <span className="text-xs font-semibold text-[var(--muted)]">Reviewer override</span>
+                              ) : null}
+                            </div>
+                            <p className="text-sm leading-6">{match.evidence_summary}</p>
+                            <blockquote className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm leading-6 text-[var(--muted)]">
+                              {match.source_quote || "No source quote"} {match.source_file ? `(${match.source_file}, page ${match.source_page})` : ""}
+                            </blockquote>
+                            <p className="text-sm leading-6 text-[var(--muted)]">{match.recommended_action}</p>
+                          </div>
+                          <div className="flex flex-col gap-3">
+                            <label className="flex flex-col gap-2 text-sm font-semibold">
+                              Override status
+                              <select
+                                className="min-h-10 rounded-md border border-[var(--border)] bg-white px-3 text-sm font-normal"
+                                onChange={(event) =>
+                                  setEvidenceOverride(match, { status: event.target.value as EvidenceOverrideEdit["status"] })
+                                }
+                                value={override.status}
+                              >
+                                <option value="met">Met</option>
+                                <option value="unclear">Unclear</option>
+                                <option value="not_found">Not found</option>
+                                <option value="not_met">Not met</option>
+                              </select>
+                            </label>
+                            <label className="flex flex-col gap-2 text-sm font-semibold">
+                              Override reason
+                              <textarea
+                                className="min-h-24 resize-y rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm font-normal leading-6 outline-none focus:border-[var(--accent)]"
+                                onChange={(event) => setEvidenceOverride(match, { reason: event.target.value })}
+                                value={override.reason}
+                              />
+                            </label>
+                            <Button disabled={!override.reason.trim()} onClick={() => handleSaveEvidenceOverride(match)}>
+                              <Save aria-hidden className="h-4 w-4" />
+                              Save evidence override
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {evidence.length === 0 ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb] p-4 text-sm text-[var(--muted)]">
+                      No evidence matches yet.
+                    </div>
+                  ) : null}
                 </div>
               </Panel>
             ) : null}
@@ -696,22 +911,89 @@ export function PriorAuthWorkspace() {
               <Panel labelledBy="draft-heading">
                 <PanelHeader action={<Button disabled={!selectedCase} onClick={handleDraft}><FileText aria-hidden className="h-4 w-4" />Draft</Button>} id="draft-heading" title="Prior Authorization Draft" />
                 <div className="flex flex-col gap-4 p-4">
-                  {drafts.map((draft) => (
-                    <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb]" key={draft.id}>
-                      <div className="flex flex-col gap-3 border-b border-[var(--border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <StatusPill tone={statusTone(draft.status)}>{draft.status}</StatusPill>
-                        <Button onClick={() => handleVerifyDraft(draft.id)} variant="secondary">
-                          <ShieldCheck aria-hidden className="h-4 w-4" />
-                          Verify citations
-                        </Button>
+                  {drafts.map((draft) => {
+                    const activeCitationCheck = citationCheck?.draft_letter_id === draft.id ? citationCheck : null;
+                    const approvalReady = activeCitationCheck?.verification_status === "pass";
+                    return (
+                      <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb]" key={draft.id}>
+                        <div className="flex flex-col gap-3 border-b border-[var(--border)] px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <StatusPill tone={statusTone(draft.status)}>{draft.status}</StatusPill>
+                            <span className="text-xs font-semibold text-[var(--muted)]">{draft.letter_type}</span>
+                          </div>
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button onClick={() => handleSaveDraftEdits(draft)} variant="secondary">
+                              <Save aria-hidden className="h-4 w-4" />
+                              Save draft edits
+                            </Button>
+                            <Button onClick={() => handleVerifyDraft(draft.id)} variant="secondary">
+                              <ShieldCheck aria-hidden className="h-4 w-4" />
+                              Verify citations
+                            </Button>
+                            <Button disabled={!approvalReady} onClick={() => handleApproveDraft(draft)}>
+                              <CheckCircle2 aria-hidden className="h-4 w-4" />
+                              Approve draft
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                          <label className="flex flex-col gap-2 text-sm font-semibold">
+                            Draft content
+                            <textarea
+                              className="min-h-[360px] resize-y rounded-md border border-[var(--border)] bg-white px-3 py-3 font-mono text-sm font-normal leading-7 outline-none focus:border-[var(--accent)]"
+                              onChange={(event) =>
+                                setDraftEdits((current) => ({ ...current, [draft.id]: event.target.value }))
+                              }
+                              value={draftEdit(draft)}
+                            />
+                          </label>
+                          <div className="rounded-md border border-[var(--border)] bg-white p-4 text-sm">
+                            {activeCitationCheck ? (
+                              <>
+                                <StatusPill tone={statusTone(activeCitationCheck.verification_status)}>
+                                  {activeCitationCheck.verification_status}
+                                </StatusPill>
+                                <div className="mt-4 flex flex-col gap-4">
+                                  <div>
+                                    <p className="font-semibold">Unsupported claims</p>
+                                    <ul className="mt-2 list-disc space-y-2 pl-5 text-[var(--muted)]">
+                                      {activeCitationCheck.unsupported_claims.length === 0 ? <li>None</li> : null}
+                                      {activeCitationCheck.unsupported_claims.map((item, index) => (
+                                        <li key={`unsupported-${index}`}>{citationIssueText(item)}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold">Weak support</p>
+                                    <ul className="mt-2 list-disc space-y-2 pl-5 text-[var(--muted)]">
+                                      {activeCitationCheck.weakly_supported_claims.length === 0 ? <li>None</li> : null}
+                                      {activeCitationCheck.weakly_supported_claims.map((item, index) => (
+                                        <li key={`weak-${index}`}>{citationIssueText(item)}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold">Citation errors</p>
+                                    <ul className="mt-2 list-disc space-y-2 pl-5 text-[var(--muted)]">
+                                      {activeCitationCheck.citation_errors.length === 0 ? <li>None</li> : null}
+                                      {activeCitationCheck.citation_errors.map((item, index) => (
+                                        <li key={`citation-${index}`}>{citationIssueText(item)}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <p className="text-[var(--muted)]">No citation check for this draft yet.</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <pre className="whitespace-pre-wrap px-4 py-4 text-sm leading-7">{draft.content_markdown}</pre>
-                    </div>
-                  ))}
-                  {citationCheck ? (
-                    <div className="rounded-md border border-[var(--border)] bg-white p-4 text-sm">
-                      <StatusPill tone={statusTone(citationCheck.verification_status)}>{citationCheck.verification_status}</StatusPill>
-                      <p className="mt-3 text-[var(--muted)]">Unsupported claims: {citationCheck.unsupported_claims.length}</p>
+                    );
+                  })}
+                  {drafts.length === 0 ? (
+                    <div className="rounded-md border border-[var(--border)] bg-[#fbfcfb] p-4 text-sm text-[var(--muted)]">
+                      No drafts yet.
                     </div>
                   ) : null}
                 </div>

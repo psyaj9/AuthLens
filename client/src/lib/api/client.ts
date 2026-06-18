@@ -40,6 +40,17 @@ export type RegisterPayload = {
   name: string;
   organization_name: string;
 };
+export type CriterionUpdatePayload = {
+  requirement?: string;
+  required_evidence?: string[];
+  is_required?: boolean;
+  ambiguity_notes?: string[];
+  reviewer_status?: string;
+};
+export type EvidenceOverridePayload = {
+  reviewer_override_status: "met" | "unclear" | "not_found" | "not_met";
+  reviewer_override_reason: string;
+};
 
 export class AuthLensApiError extends Error {
   status: number;
@@ -210,6 +221,18 @@ export async function listCriteria(caseId: string): Promise<Criterion[]> {
   return payload.criteria;
 }
 
+export async function updateCriterion(
+  criterionId: string,
+  payload: CriterionUpdatePayload
+): Promise<Criterion> {
+  const response = await fetch(`/api/criteria/${criterionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return parseLocalRouteResponse(response, criteriaListSchema.shape.criteria.element);
+}
+
 export async function matchEvidence(caseId: string): Promise<EvidenceMatch[]> {
   const response = await fetch(`/api/cases/${caseId}/evidence/match`, {
     method: "POST"
@@ -224,6 +247,18 @@ export async function listEvidence(caseId: string): Promise<EvidenceMatch[]> {
   });
   const payload = await parseLocalRouteResponse(response, evidenceListSchema);
   return payload.matches;
+}
+
+export async function overrideEvidenceMatch(
+  matchId: string,
+  payload: EvidenceOverridePayload
+): Promise<EvidenceMatch> {
+  const response = await fetch(`/api/evidence-matches/${matchId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return parseLocalRouteResponse(response, evidenceListSchema.shape.matches.element);
 }
 
 export async function generateReadinessReport(
@@ -250,6 +285,18 @@ export async function listDrafts(caseId: string): Promise<DraftLetter[]> {
   return payload.drafts;
 }
 
+export async function updateDraft(
+  draftId: string,
+  contentMarkdown: string
+): Promise<DraftLetter> {
+  const response = await fetch(`/api/drafts/${draftId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content_markdown: contentMarkdown })
+  });
+  return parseLocalRouteResponse(response, draftSchema);
+}
+
 export async function verifyDraftCitations(
   draftId: string
 ): Promise<CitationCheck> {
@@ -257,4 +304,11 @@ export async function verifyDraftCitations(
     method: "POST"
   });
   return parseLocalRouteResponse(response, citationCheckSchema);
+}
+
+export async function approveDraft(draftId: string): Promise<DraftLetter> {
+  const response = await fetch(`/api/drafts/${draftId}/approve`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, draftSchema);
 }
