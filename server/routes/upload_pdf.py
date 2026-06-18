@@ -10,6 +10,7 @@ from modules.config import (
     get_max_upload_files,
     get_max_upload_mb,
     is_production,
+    legacy_qa_enabled,
 )
 from modules.schemas import ErrorResponse, MessageResponse
 from modules.security import require_internal_token
@@ -113,6 +114,8 @@ async def upload_pdf(
     _token_guard: None = Depends(require_internal_token),
 ):
     try:
+        if not legacy_qa_enabled():
+            return _error_response("Legacy PDF Q&A is disabled.", 403)
         _validate_uploaded_files(uploaded_files)
         logger.info(f"Received {len(uploaded_files)} files for upload.")
         load_vector_store(uploaded_files)

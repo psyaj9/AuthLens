@@ -238,6 +238,52 @@ class PriorAuthWorkflowTests(unittest.TestCase):
         self.assertEqual(duplicate_response.status_code, 409)
         self.assertEqual(duplicate_response.json(), {"error": "An account with this email already exists"})
 
+    def test_login_throttles_repeated_invalid_attempts(self):
+        os.environ["AUTH_RATE_LIMIT_MAX_ATTEMPTS"] = "2"
+        os.environ["AUTH_RATE_LIMIT_WINDOW_SECONDS"] = "300"
+        client = self._client()
+        email = "throttle-login@example.test"
+        self._create_test_user(email=email, password="correct-password", role="admin")
+
+        responses = [
+            client.post("/api/auth/login", json={"email": email, "password": "wrong-password"})
+            for _ in range(3)
+        ]
+
+        self.assertEqual([response.status_code for response in responses], [401, 401, 429])
+        self.assertEqual(responses[-1].json(), {"error": "Too many attempts. Try again later."})
+
+    def test_forgot_password_throttles_repeated_requests(self):
+        os.environ["AUTH_RATE_LIMIT_MAX_ATTEMPTS"] = "2"
+        os.environ["AUTH_RATE_LIMIT_WINDOW_SECONDS"] = "300"
+        client = self._client()
+        email = "throttle-reset@example.test"
+        self._create_test_user(email=email, password="old-password", role="admin")
+
+        responses = [
+            client.post("/api/auth/forgot-password", json={"email": email})
+            for _ in range(3)
+        ]
+
+        self.assertEqual([response.status_code for response in responses], [200, 200, 429])
+        self.assertEqual(responses[-1].json(), {"error": "Too many attempts. Try again later."})
+
+    def test_reset_password_throttles_repeated_invalid_tokens(self):
+        os.environ["AUTH_RATE_LIMIT_MAX_ATTEMPTS"] = "2"
+        os.environ["AUTH_RATE_LIMIT_WINDOW_SECONDS"] = "300"
+        client = self._client()
+
+        responses = [
+            client.post(
+                "/api/auth/reset-password",
+                json={"reset_token": f"invalid-token-{index}", "password": "new-password"},
+            )
+            for index in range(3)
+        ]
+
+        self.assertEqual([response.status_code for response in responses], [400, 400, 429])
+        self.assertEqual(responses[-1].json(), {"error": "Too many attempts. Try again later."})
+
     def test_forgot_password_issues_reset_token_and_reset_password_rotates_credentials(self):
         client = self._client()
         email = "reset@example.test"
@@ -519,6 +565,29 @@ class PriorAuthWorkflowTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 413)
         self.assertIn("upload limit", response.json()["error"])
+
+    def test_typed_document_upload_enforces_pdf_page_limit_before_indexing(self):
+        os.environ["MAX_PDF_PAGES"] = "1"
+        client = self._client()
+        token = self._login(client)
+        case_id = self._create_case(client, token, "SYN-LMRI-PAGE-LIMIT")
+        documents_service = importlib.import_module("services.documents")
+
+        with patch.object(
+            documents_service,
+            "extract_pdf_pages",
+            return_value=[(1, "first page"), (2, "second page")],
+        ), patch.object(documents_service, "upsert_priorauth_chunks") as upsert_chunks:
+            response = client.post(
+                f"/api/cases/{case_id}/documents",
+                headers={"Authorization": f"Bearer {token}"},
+                data={"document_type": "payer_policy"},
+                files={"file": ("policy.pdf", b"%PDF-1.4\npolicy text", "application/pdf")},
+            )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.json(), {"error": "PDF page limit exceeded. Maximum pages allowed: 1."})
+        upsert_chunks.assert_not_called()
 
     def test_priorauth_analysis_generates_evidence_report_draft_and_citation_check(self):
         client = self._client()

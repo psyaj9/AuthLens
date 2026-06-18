@@ -1,8 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+afterEach(() => {
+  delete process.env.BACKEND_API_URL;
+  delete process.env.ENABLE_LEGACY_QA;
+  delete process.env.VERCEL_ENV;
+  vi.unstubAllGlobals();
+  vi.resetModules();
+});
 
 describe("POST /api/query", () => {
   it("validates the query and proxies it to the FastAPI field name", async () => {
     process.env.BACKEND_API_URL = "https://backend.example.test";
+    process.env.ENABLE_LEGACY_QA = "true";
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({
         response: "Use de-identified documents.",
@@ -33,8 +42,32 @@ describe("POST /api/query", () => {
     expect(init.body.get("user_query")).toBe("What can I upload?");
   });
 
+  it("rejects legacy queries in production unless explicitly enabled", async () => {
+    process.env.BACKEND_API_URL = "https://backend.example.test";
+    process.env.VERCEL_ENV = "production";
+    delete process.env.ENABLE_LEGACY_QA;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      new Request("http://localhost/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_query: "What can I upload?" })
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Legacy PDF Q&A is disabled."
+    });
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("sanitizes source labels before returning them to the browser", async () => {
     process.env.BACKEND_API_URL = "https://backend.example.test";
+    process.env.ENABLE_LEGACY_QA = "true";
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -86,6 +119,7 @@ describe("POST /api/query", () => {
 
   it("rejects mismatched Origin before proxying the query", async () => {
     process.env.BACKEND_API_URL = "https://backend.example.test";
+    process.env.ENABLE_LEGACY_QA = "true";
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -110,6 +144,7 @@ describe("POST /api/query", () => {
 
   it("rejects cross-site fetch metadata before proxying the query", async () => {
     process.env.BACKEND_API_URL = "https://backend.example.test";
+    process.env.ENABLE_LEGACY_QA = "true";
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -134,6 +169,7 @@ describe("POST /api/query", () => {
 
   it("returns a generic error when the backend fetch fails", async () => {
     process.env.BACKEND_API_URL = "https://backend.example.test";
+    process.env.ENABLE_LEGACY_QA = "true";
     vi.stubGlobal(
       "fetch",
       vi.fn().mockRejectedValue(new Error("getaddrinfo backend.example.test"))

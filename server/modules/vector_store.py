@@ -10,7 +10,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from logger import logger
-from modules.config import is_production
+from modules.config import get_max_document_chunks, is_production
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(SERVER_DIR / ".env")
@@ -111,6 +111,11 @@ def load_vector_store(uploaded_files):
 
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
             text_chunks = text_splitter.split_documents(documents)
+            max_chunks = get_max_document_chunks()
+            if len(text_chunks) > max_chunks:
+                raise ValueError(
+                    f"Document chunk limit exceeded. Maximum chunks allowed: {max_chunks}."
+                )
 
             texts = [chunk.page_content for chunk in text_chunks]
             metadata = [

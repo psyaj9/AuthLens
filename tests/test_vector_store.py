@@ -162,6 +162,41 @@ class VectorStoreTests(unittest.TestCase):
             "Uploading document to Pinecone",
         )
 
+    def test_load_vector_store_enforces_chunk_limit_before_upsert(self):
+        first = SimpleNamespace(page_content="First chunk", metadata={"source": "doc.pdf"})
+        second = SimpleNamespace(page_content="Second chunk", metadata={"source": "doc.pdf"})
+        upload = SimpleNamespace(
+            filename="doc.pdf",
+            file=SimpleNamespace(read=lambda: b"%PDF-test"),
+        )
+        index = MagicMock()
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
+            os.environ,
+            {"MAX_DOCUMENT_CHUNKS": "1"},
+            clear=False,
+        ), patch.object(
+            self.vector_store, "UPLOAD_DIR", Path(tmpdir)
+        ), patch.object(
+            self.vector_store, "get_pinecone_index", return_value=(index, "authlens-test")
+        ), patch.object(
+            self.vector_store, "PyPDFLoader"
+        ) as loader_cls, patch.object(
+            self.vector_store, "RecursiveCharacterTextSplitter"
+        ) as splitter_cls, patch.object(
+            self.vector_store, "GoogleGenerativeAIEmbeddings"
+        ) as embeddings_cls, patch.object(
+            self.vector_store, "tqdm"
+        ):
+            loader_cls.return_value.load.return_value = [first, second]
+            splitter_cls.return_value.split_documents.return_value = [first, second]
+
+            with self.assertRaisesRegex(ValueError, "Document chunk limit exceeded"):
+                self.vector_store.load_vector_store([upload])
+
+        embeddings_cls.return_value.embed_documents.assert_not_called()
+        index.upsert.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,8 @@ const qaResponseSchema = z.object({
 });
 
 const LOCAL_DEV_BACKEND_API_URL = "http://127.0.0.1:8000";
+const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
+const FALSY_ENV_VALUES = new Set(["0", "false", "no", "off"]);
 
 export function getBackendApiUrl() {
   const value = process.env.BACKEND_API_URL?.trim();
@@ -45,6 +47,16 @@ export function getBackendApiUrl() {
 export function getInternalApiToken() {
   const value = process.env.INTERNAL_API_TOKEN?.trim();
   return value && value.length > 0 ? value : undefined;
+}
+
+export function legacyQaEnabled() {
+  const configured = process.env.ENABLE_LEGACY_QA?.trim().toLowerCase();
+  if (configured) {
+    if (TRUTHY_ENV_VALUES.has(configured)) return true;
+    if (FALSY_ENV_VALUES.has(configured)) return false;
+  }
+
+  return process.env.NODE_ENV !== "production" && process.env.VERCEL_ENV !== "production";
 }
 
 export function buildBackendUrl(baseUrl: string, path: string) {

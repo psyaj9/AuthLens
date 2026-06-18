@@ -9,7 +9,14 @@ DEFAULT_ALLOWED_ORIGINS = [
 
 DEFAULT_MAX_UPLOAD_FILES = 5
 DEFAULT_MAX_UPLOAD_MB = 10.0
+DEFAULT_AUTH_RATE_LIMIT_MAX_ATTEMPTS = 5
+DEFAULT_AUTH_RATE_LIMIT_WINDOW_SECONDS = 300
+DEFAULT_MAX_PDF_PAGES = 25
+DEFAULT_MAX_EXTRACTED_CHARS = 200_000
+DEFAULT_MAX_DOCUMENT_CHUNKS = 500
 PRODUCTION_PASSWORD_RESET_DELIVERY_MODES = {"email", "external"}
+TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+FALSY_ENV_VALUES = {"0", "false", "no", "off"}
 
 
 def get_environment() -> str:
@@ -18,6 +25,25 @@ def get_environment() -> str:
 
 def is_production() -> bool:
     return get_environment() == "production"
+
+
+def _parse_bool_env(name: str) -> bool | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in TRUTHY_ENV_VALUES:
+        return True
+    if normalized in FALSY_ENV_VALUES:
+        return False
+    return None
+
+
+def legacy_qa_enabled() -> bool:
+    configured = _parse_bool_env("ENABLE_LEGACY_QA")
+    if configured is not None:
+        return configured
+    return not is_production()
 
 
 def _required_production_env(name: str) -> str:
@@ -106,3 +132,23 @@ def get_max_upload_bytes() -> int:
 
 def format_upload_mb(value: float) -> str:
     return str(int(value)) if value.is_integer() else str(value)
+
+
+def get_auth_rate_limit_max_attempts() -> int:
+    return _parse_int_env("AUTH_RATE_LIMIT_MAX_ATTEMPTS", DEFAULT_AUTH_RATE_LIMIT_MAX_ATTEMPTS)
+
+
+def get_auth_rate_limit_window_seconds() -> int:
+    return _parse_int_env("AUTH_RATE_LIMIT_WINDOW_SECONDS", DEFAULT_AUTH_RATE_LIMIT_WINDOW_SECONDS)
+
+
+def get_max_pdf_pages() -> int:
+    return _parse_int_env("MAX_PDF_PAGES", DEFAULT_MAX_PDF_PAGES)
+
+
+def get_max_extracted_chars() -> int:
+    return _parse_int_env("MAX_EXTRACTED_CHARS", DEFAULT_MAX_EXTRACTED_CHARS)
+
+
+def get_max_document_chunks() -> int:
+    return _parse_int_env("MAX_DOCUMENT_CHUNKS", DEFAULT_MAX_DOCUMENT_CHUNKS)

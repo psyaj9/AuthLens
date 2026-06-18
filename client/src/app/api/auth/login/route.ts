@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     return errorResponse("Backend returned an unexpected auth response.", 502);
   }
 
-  const nextResponse = NextResponse.json(payload);
+  const nextResponse = NextResponse.json({ user: payload.user });
   nextResponse.cookies.set(AUTH_COOKIE_NAME, payload.access_token, authCookieOptions(60 * 60 * 8));
   return nextResponse;
 }

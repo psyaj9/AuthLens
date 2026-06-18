@@ -1,7 +1,7 @@
 from modules.llm import get_llm
 from fastapi import APIRouter, Depends, Form
 from fastapi.responses import JSONResponse
-from modules.config import is_production
+from modules.config import is_production, legacy_qa_enabled
 from modules.query_handler import handle_query_chain
 from modules.schemas import ErrorResponse, QueryResponse
 from modules.security import require_internal_token
@@ -36,6 +36,8 @@ async def queries(
     _token_guard: None = Depends(require_internal_token),
 ):
     try:
+        if not legacy_qa_enabled():
+            return _error_response("Legacy PDF Q&A is disabled.", 403)
         if is_production():
             logger.info("Received query for processing.")
         else:

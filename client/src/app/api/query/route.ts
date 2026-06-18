@@ -7,6 +7,7 @@ import {
   buildBackendUrl,
   getBackendApiUrl,
   isCrossOriginMutation,
+  legacyQaEnabled,
   normalizeBackendError,
   parseQaResponse
 } from "@/lib/server/backend-proxy";
@@ -48,6 +49,10 @@ function sanitizeSources(sources: string[]) {
 export async function POST(request: Request) {
   if (isCrossOriginMutation(request)) {
     return errorResponse("Cross-origin requests are not allowed.", 403);
+  }
+
+  if (!legacyQaEnabled()) {
+    return errorResponse("Legacy PDF Q&A is disabled.", 403);
   }
 
   const payload = await readQueryPayload(request).catch(() => null);

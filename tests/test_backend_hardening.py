@@ -213,6 +213,40 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(upload_response.status_code, 401)
         self.assertEqual(upload_response.json(), {"error": "Unauthorized"})
 
+    def test_legacy_upload_and_query_are_disabled_by_default_in_production(self):
+        with patch.dict(
+            os.environ,
+            {"ENVIRONMENT": "production", "INTERNAL_API_TOKEN": "secret"},
+            clear=False,
+        ):
+            os.environ.pop("ENABLE_LEGACY_QA", None)
+            client = self._client()
+            upload_module = importlib.import_module("routes.upload_pdf")
+            queries_module, index, embeddings = self._query_dependencies()
+
+            with patch.object(upload_module, "load_vector_store") as load_vector_store, patch.object(
+                queries_module, "get_pinecone_index", return_value=(index, "auth-index")
+            ), patch.object(
+                queries_module, "get_embeddings", return_value=embeddings
+            ):
+                upload_response = client.post(
+                    "/api/upload_pdf/",
+                    headers={"Authorization": "Bearer secret"},
+                    files=[("uploaded_files", ("doc.pdf", b"%PDF-1.4", "application/pdf"))],
+                )
+                query_response = client.post(
+                    "/api/queries/",
+                    headers={"Authorization": "Bearer secret"},
+                    data={"user_query": "what is diabetes?"},
+                )
+
+        self.assertEqual(upload_response.status_code, 403)
+        self.assertEqual(upload_response.json(), {"error": "Legacy PDF Q&A is disabled."})
+        self.assertEqual(query_response.status_code, 403)
+        self.assertEqual(query_response.json(), {"error": "Legacy PDF Q&A is disabled."})
+        load_vector_store.assert_not_called()
+        index.query.assert_not_called()
+
     def test_internal_token_allows_authorized_query_with_existing_wire_shape(self):
         with patch.dict(os.environ, {"INTERNAL_API_TOKEN": "secret"}, clear=False):
             client = self._client()
@@ -366,7 +400,12 @@ class BackendHardeningTests(unittest.TestCase):
     def test_upload_rejection_logs_do_not_include_filename_in_production(self):
         with patch.dict(
             os.environ,
-            {"ENVIRONMENT": "production", "MAX_UPLOAD_MB": "1", "INTERNAL_API_TOKEN": "secret"},
+            {
+                "ENVIRONMENT": "production",
+                "MAX_UPLOAD_MB": "1",
+                "INTERNAL_API_TOKEN": "secret",
+                "ENABLE_LEGACY_QA": "true",
+            },
             clear=False,
         ):
             client = self._client()
@@ -397,7 +436,11 @@ class BackendHardeningTests(unittest.TestCase):
     def test_queries_suppresses_sensitive_content_logs_in_production(self):
         with patch.dict(
             os.environ,
-            {"ENVIRONMENT": "production", "INTERNAL_API_TOKEN": "secret"},
+            {
+                "ENVIRONMENT": "production",
+                "INTERNAL_API_TOKEN": "secret",
+                "ENABLE_LEGACY_QA": "true",
+            },
             clear=False,
         ):
             client = self._client()
@@ -432,7 +475,11 @@ class BackendHardeningTests(unittest.TestCase):
     def test_query_errors_do_not_leak_exception_details_in_production(self):
         with patch.dict(
             os.environ,
-            {"ENVIRONMENT": "production", "INTERNAL_API_TOKEN": "secret"},
+            {
+                "ENVIRONMENT": "production",
+                "INTERNAL_API_TOKEN": "secret",
+                "ENABLE_LEGACY_QA": "true",
+            },
             clear=False,
         ):
             client = self._client()
@@ -461,7 +508,11 @@ class BackendHardeningTests(unittest.TestCase):
     def test_upload_errors_do_not_leak_exception_details_in_production(self):
         with patch.dict(
             os.environ,
-            {"ENVIRONMENT": "production", "INTERNAL_API_TOKEN": "secret"},
+            {
+                "ENVIRONMENT": "production",
+                "INTERNAL_API_TOKEN": "secret",
+                "ENABLE_LEGACY_QA": "true",
+            },
             clear=False,
         ):
             client = self._client()

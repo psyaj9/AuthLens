@@ -1,5 +1,30 @@
 # Next PRD Implementation Phases
 
+## Current Remaining Phase 4/5 Launch Gates
+
+- [x] Re-read `README.md`, `priorauth_evidence_copilot_prd.md`, `tasks/todo.md`, and `docs/superpowers/plans/2026-06-18-next-prd-phases.md` to identify the true remaining work after the completed MVP slices.
+- [x] Analyze `ChatGPT-Platform Novelty Development.md` and map its novelty/product requirements onto the current PriorAuth Evidence Copilot implementation path.
+- [x] Run parallel read-only subagent reconnaissance for README/PRD/todo state, novelty-doc implications, and security scan seed surfaces.
+- [x] Save the next implementation plan at `docs/superpowers/plans/2026-06-18-authlens-remaining-launch-gates.md`.
+- [x] Run the real Codex Security repository scan with scoped emphasis on auth/session, cross-tenant direct IDs, exports/downloads, prompt injection, and upload handling.
+- [ ] Fix validated Codex Security findings in severity order, with regression tests and scan-report receipts.
+- [ ] Add executable live deployment smoke gates for the Render backend and Vercel client.
+- [ ] Expand the synthetic eval dataset beyond the 3-case smoke set toward the PRD target coverage.
+- [ ] Add a real password reset delivery path before enabling production forgot-password with `PASSWORD_RESET_DELIVERY_MODE=email` or `PASSWORD_RESET_DELIVERY_MODE=external`.
+- [ ] Run final backend, client, dependency-audit, synthetic-eval, Codex Security, and live deployment smoke verification.
+
+### Current Launch-Gate Plan Notes
+
+- The older phase plan remains useful as historical context, but Phase 0 through Phase 3 are now implemented and most Phase 4/5 slices are already done.
+- The remaining Phase 4 work is dataset growth: more synthetic payer policies, patient packets, denial letters, gold criteria, gold evidence matches, gold missing items, prompt-injection cases, and letter constraints.
+- The remaining Phase 5 work is not another dependency audit; CircleCI already runs backend and client audit gates. The missing gates are the real Codex Security scan, fixes from that scan, live Render/Vercel smoke automation, and true reset delivery.
+- The novelty document reinforces the intended product boundary: AuthLens should stay positioned as a synthetic/de-identified, citation-backed prior-auth evidence-preparation workflow with human review, not as a diagnosis, treatment, payer-approval, or generic medical-chatbot system.
+- Security reconnaissance seed risks for the real scan: legacy shared Pinecone Q&A upload/query routes, auth/reset rate limiting and token lifecycle, export download headers and content exposure, prompt injection across legacy and structured flows, PDF parser/resource limits, and edited-draft/export rendering assumptions.
+- Deployment smoke should become a scriptable gate that checks `GET <render>/api/health/`, `GET <vercel>/`, and `GET <vercel>/api/health` so the client-to-backend binding is verified after deploy.
+- Password reset delivery should add a delivery adapter, likely SMTP for `email` mode and a webhook handoff for `external` mode, and must not commit usable reset tokens if delivery fails.
+- Codex Security scan bundle: `C:\tmp\codex-security-scans\AuthLens\d35c87ce_20260618-154542\report.md` and `report.html`.
+- Validated scan findings to fix first: legacy Q&A unscoped Pinecone/public proxy exposure (`AL-001`, high), auth/reset attempt throttling (`AL-002`, medium), browser auth proxy token exposure (`AL-003`, medium), and PDF parser/indexing resource limits (`AL-004`, medium).
+
 - [x] Execute Phase 0 from `docs/superpowers/plans/2026-06-18-next-prd-phases.md`: executable synthetic evals and cross-tenant direct-ID tests.
 - [x] Execute Phase 1: reviewer workspace completion.
 - [x] Execute Phase 2: export artifacts, download APIs, and packet manifest.

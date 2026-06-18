@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from secrets import token_urlsafe
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from dependencies.auth import CurrentUser, get_current_user
 from models.priorauth import Organization, OrganizationMembership, PasswordResetToken, User
 from modules.auth import create_access_token, hash_password, hash_reset_token, verify_password
 from modules.config import is_production, password_reset_delivery_configured
+from modules.rate_limit import ensure_not_limited, record_and_enforce, record_attempt
 from modules.schemas import (
     AuthResponse,
     ForgotPasswordRequest,
@@ -48,9 +49,12 @@ def user_profile(user: User, organization: Organization, role: str) -> UserProfi
 
 
 @router.post("/auth/login", response_model=AuthResponse)
-async def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == normalize_email(payload.email)))
+async def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    email = normalize_email(payload.email)
+    ensure_not_limited("login", request, email)
+    user = db.scalar(select(User).where(User.email == email))
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
+        record_attempt("login", request, email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     membership = db.scalar(select(OrganizationMembership).where(OrganizationMembership.user_id == user.id))
@@ -124,7 +128,9 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/auth/forgot-password", response_model=ForgotPasswordResponse)
-async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    email = normalize_email(payload.email)
+    record_and_enforce("forgot-password", request, email)
     if is_production() and not password_reset_delivery_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -132,7 +138,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
         )
 
     reset_token = None
-    user = db.scalar(select(User).where(User.email == normalize_email(payload.email)))
+    user = db.scalar(select(User).where(User.email == email))
     if user is not None and user.is_active:
         now = datetime.now(UTC)
         existing_tokens = db.scalars(
@@ -168,7 +174,8 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
 
 
 @router.post("/auth/reset-password", response_model=MessageResponse)
-async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+async def reset_password(payload: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    ensure_not_limited("reset-password", request)
     now = datetime.now(UTC)
     token_record = db.scalar(
         select(PasswordResetToken).where(
@@ -178,10 +185,12 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
         )
     )
     if token_record is None:
+        record_attempt("reset-password", request)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
 
     user = db.get(User, token_record.user_id)
     if user is None or not user.is_active:
+        record_attempt("reset-password", request)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
 
     membership = db.scalar(select(OrganizationMembership).where(OrganizationMembership.user_id == user.id))

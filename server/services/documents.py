@@ -7,7 +7,14 @@ from langchain_community.document_loaders import PyPDFLoader
 from sqlalchemy.orm import Session
 
 from models.priorauth import Document, DocumentChunk, DocumentPage, PriorAuthCase
-from modules.config import format_upload_mb, get_max_upload_bytes, get_max_upload_mb
+from modules.config import (
+    format_upload_mb,
+    get_max_document_chunks,
+    get_max_extracted_chars,
+    get_max_pdf_pages,
+    get_max_upload_bytes,
+    get_max_upload_mb,
+)
 from modules.vector_store import upsert_priorauth_chunks
 from services.audit import log_audit_event
 
@@ -74,6 +81,23 @@ def extract_pdf_pages(file_path: Path) -> list[tuple[int, str]]:
     return [(1, fallback)]
 
 
+def enforce_document_resource_limits(pages: list[tuple[int, str]]) -> None:
+    max_pages = get_max_pdf_pages()
+    if len(pages) > max_pages:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"PDF page limit exceeded. Maximum pages allowed: {max_pages}.",
+        )
+
+    max_chars = get_max_extracted_chars()
+    extracted_chars = sum(len(page_text) for _, page_text in pages)
+    if extracted_chars > max_chars:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"PDF text limit exceeded. Maximum extracted characters allowed: {max_chars}.",
+        )
+
+
 def read_limited_upload(uploaded_file: UploadFile) -> bytes:
     max_bytes = get_max_upload_bytes()
     chunks: list[bytes] = []
@@ -127,6 +151,7 @@ def create_case_document(
     document.file_uri = str(file_path)
 
     pages = extract_pdf_pages(file_path)
+    enforce_document_resource_limits(pages)
     document.page_count = len(pages)
     chunk_payloads: list[dict] = []
     chunk_index = 0
@@ -172,6 +197,13 @@ def create_case_document(
                 }
             )
             chunk_index += 1
+
+    max_chunks = get_max_document_chunks()
+    if len(chunk_payloads) > max_chunks:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Document chunk limit exceeded. Maximum chunks allowed: {max_chunks}.",
+        )
 
     upsert_priorauth_chunks(chunk_payloads)
     document.processing_status = "indexed"
