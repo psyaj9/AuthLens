@@ -107,10 +107,18 @@ describe("reviewer mutation proxy routes", () => {
   });
 
   it("proxies draft edits, citation checks, and approvals", async () => {
+    const appealDraftRoute = await import("./cases/[caseId]/drafts/appeal/route");
     const draftRoute = await import("./drafts/[draftId]/route");
     const citationRoute = await import("./drafts/[draftId]/verify-citations/route");
     const approveRoute = await import("./drafts/[draftId]/approve/route");
 
+    await expectProxyCall(
+      appealDraftRoute.POST,
+      "/api/cases/case_123/drafts/appeal",
+      { caseId: "case_123" },
+      "/api/cases/case_123/drafts/appeal",
+      { method: "POST" }
+    );
     await expectProxyCall(
       draftRoute.PATCH,
       "/api/drafts/draft_123",
@@ -141,6 +149,7 @@ describe("reviewer mutation proxy routes", () => {
   it("rejects cross-origin reviewer mutations before proxying", async () => {
     const criteriaRoute = await import("./criteria/[criterionId]/route");
     const evidenceRoute = await import("./evidence-matches/[matchId]/route");
+    const appealDraftRoute = await import("./cases/[caseId]/drafts/appeal/route");
     const draftRoute = await import("./drafts/[draftId]/route");
     const citationRoute = await import("./drafts/[draftId]/verify-citations/route");
     const approveRoute = await import("./drafts/[draftId]/approve/route");
@@ -156,6 +165,12 @@ describe("reviewer mutation proxy routes", () => {
       "/api/evidence-matches/match_123",
       { matchId: "match_123" },
       { method: "PATCH", body: "{}" }
+    );
+    await expectCrossOriginRejection(
+      appealDraftRoute.POST,
+      "/api/cases/case_123/drafts/appeal",
+      { caseId: "case_123" },
+      { method: "POST" }
     );
     await expectCrossOriginRejection(
       draftRoute.PATCH,

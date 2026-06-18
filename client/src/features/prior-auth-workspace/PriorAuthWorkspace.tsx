@@ -19,6 +19,7 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { StatusPill } from "@/components/ui/status-pill";
 import {
   approveDraft,
+  createAppealDraft,
   createCase,
   createLetterExport,
   createPacketExport,
@@ -71,6 +72,7 @@ type EvidenceOverrideEdit = {
 
 const documentTypes = [
   ["payer_policy", "Payer policy"],
+  ["denial_letter", "Denial letter"],
   ["patient_note", "Patient note"],
   ["lab_result", "Lab result"],
   ["imaging_report", "Imaging report"],
@@ -86,6 +88,15 @@ const defaultCase = {
   requested_service: "Lumbar spine MRI",
   service_code: "72148",
   case_type: "prior_auth" as const
+};
+
+const defaultAppealCase = {
+  patient_label: "SYN-LMRI-APPEAL-001",
+  payer_name: "Example Health Plan",
+  specialty: "Radiology",
+  requested_service: "Lumbar spine MRI appeal",
+  service_code: "72148",
+  case_type: "appeal" as const
 };
 
 function messageFrom(error: unknown, fallback: string) {
@@ -341,6 +352,9 @@ export function PriorAuthWorkspace() {
     [cases, selectedCaseId]
   );
   const approvedDraftAvailable = drafts.some((draft) => draft.status === "approved");
+  const appealDraftAvailable =
+    selectedCase?.case_type === "appeal" ||
+    documents.some((document) => document.document_type === "denial_letter");
 
   const refreshCases = useCallback(async () => {
     const nextCases = await listCases();
@@ -449,6 +463,14 @@ export function PriorAuthWorkspace() {
     }, "Synthetic prior authorization case created.");
   }
 
+  function handleCreateAppealCase() {
+    void runAction(async () => {
+      const created = await createCase(defaultAppealCase);
+      await refreshCases();
+      setSelectedCaseId(created.id);
+    }, "Synthetic appeal case created.");
+  }
+
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null);
     event.target.value = "";
@@ -502,6 +524,16 @@ export function PriorAuthWorkspace() {
       setDraftEdits((current) => ({ ...current, [draft.id]: draft.content_markdown }));
       setCitationCheck(null);
     }, "Prior authorization draft generated.");
+  }
+
+  function handleAppealDraft() {
+    if (!selectedCase) return;
+    void runAction(async () => {
+      const draft = await createAppealDraft(selectedCase.id);
+      setDrafts([draft, ...drafts.filter((item) => item.id !== draft.id)]);
+      setDraftEdits((current) => ({ ...current, [draft.id]: draft.content_markdown }));
+      setCitationCheck(null);
+    }, "Appeal draft generated.");
   }
 
   function handleVerifyDraft(draftId: string) {
@@ -666,7 +698,18 @@ export function PriorAuthWorkspace() {
         <div className="grid min-h-[calc(100vh-150px)] grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
           <Panel className="min-h-[560px]" labelledBy="cases-heading">
             <PanelHeader
-              action={<Button onClick={handleCreateCase}><Plus aria-hidden className="h-4 w-4" />Case</Button>}
+              action={
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={handleCreateCase}>
+                    <Plus aria-hidden className="h-4 w-4" />
+                    Case
+                  </Button>
+                  <Button onClick={handleCreateAppealCase} variant="secondary">
+                    <Plus aria-hidden className="h-4 w-4" />
+                    Appeal
+                  </Button>
+                </div>
+              }
               id="cases-heading"
               title="Cases"
             >
@@ -933,7 +976,26 @@ export function PriorAuthWorkspace() {
 
             {activeTab === "draft" ? (
               <Panel labelledBy="draft-heading">
-                <PanelHeader action={<Button disabled={!selectedCase} onClick={handleDraft}><FileText aria-hidden className="h-4 w-4" />Draft</Button>} id="draft-heading" title="Prior Authorization Draft" />
+                <PanelHeader
+                  action={
+                    <div className="flex flex-wrap gap-2">
+                      <Button disabled={!selectedCase} onClick={handleDraft}>
+                        <FileText aria-hidden className="h-4 w-4" />
+                        Draft prior auth
+                      </Button>
+                      <Button
+                        disabled={!selectedCase || !appealDraftAvailable}
+                        onClick={handleAppealDraft}
+                        variant="secondary"
+                      >
+                        <FileText aria-hidden className="h-4 w-4" />
+                        Draft appeal
+                      </Button>
+                    </div>
+                  }
+                  id="draft-heading"
+                  title="Draft Letters"
+                />
                 <div className="flex flex-col gap-4 p-4">
                   <div className="rounded-md border border-[var(--border)] bg-white p-4">
                     <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">

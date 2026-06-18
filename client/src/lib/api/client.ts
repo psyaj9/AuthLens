@@ -174,7 +174,7 @@ export async function createCase(payload: {
   specialty: string;
   requested_service: string;
   service_code?: string;
-  case_type: "prior_auth";
+  case_type: "prior_auth" | "appeal";
 }): Promise<CaseSummary> {
   const response = await fetch("/api/cases", {
     method: "POST",
@@ -274,6 +274,13 @@ export async function generateReadinessReport(
 
 export async function createPriorAuthDraft(caseId: string): Promise<DraftLetter> {
   const response = await fetch(`/api/cases/${caseId}/drafts/prior-auth`, {
+    method: "POST"
+  });
+  return parseLocalRouteResponse(response, draftSchema);
+}
+
+export async function createAppealDraft(caseId: string): Promise<DraftLetter> {
+  const response = await fetch(`/api/cases/${caseId}/drafts/appeal`, {
     method: "POST"
   });
   return parseLocalRouteResponse(response, draftSchema);

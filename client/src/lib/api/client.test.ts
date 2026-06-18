@@ -3,8 +3,11 @@ import {
   approveDraft,
   askQuestion,
   AuthLensApiError,
+  createAppealDraft,
+  createCase,
   createLetterExport,
   createPacketExport,
+  createPriorAuthDraft,
   createReadinessExport,
   forgotPassword,
   overrideEvidenceMatch,
@@ -148,6 +151,76 @@ describe("client API client", () => {
     );
   });
 
+  it("creates appeal cases and draft letters through local case routes", async () => {
+    const casePayload = {
+      id: "case_123",
+      patient_label: "SYN-LMRI-APPEAL",
+      payer_name: "Example Health Plan",
+      plan_name: null,
+      specialty: "Radiology",
+      requested_service: "Lumbar spine MRI appeal",
+      service_code: "72148",
+      diagnosis_summary: null,
+      case_type: "appeal",
+      status: "new",
+      readiness_score: null,
+      missing_required_criteria_count: 0,
+      assigned_to_user_id: null,
+      created_at: "2026-06-18T00:00:00Z",
+      updated_at: "2026-06-18T00:00:00Z"
+    };
+    const draftPayload = {
+      id: "draft_appeal_123",
+      case_id: "case_123",
+      letter_type: "appeal",
+      status: "draft",
+      content_markdown: "Clinician review is required before appeal submission.",
+      created_by: "ai",
+      approved_at: null,
+      created_at: "2026-06-18T00:00:00Z",
+      updated_at: "2026-06-18T00:00:00Z"
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(casePayload))
+      .mockResolvedValueOnce(Response.json(draftPayload));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const createdCase = await createCase({
+      patient_label: "SYN-LMRI-APPEAL",
+      payer_name: "Example Health Plan",
+      specialty: "Radiology",
+      requested_service: "Lumbar spine MRI appeal",
+      service_code: "72148",
+      case_type: "appeal"
+    });
+    const appealDraft = await createAppealDraft("case_123");
+
+    expect(createdCase.case_type).toBe("appeal");
+    expect(appealDraft.letter_type).toBe("appeal");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/cases",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_label: "SYN-LMRI-APPEAL",
+          payer_name: "Example Health Plan",
+          specialty: "Radiology",
+          requested_service: "Lumbar spine MRI appeal",
+          service_code: "72148",
+          case_type: "appeal"
+        })
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/cases/case_123/drafts/appeal",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("updates criteria review state through the local route", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({
@@ -263,6 +336,31 @@ describe("client API client", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/drafts/draft_123/approve",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("creates prior authorization drafts through local case routes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        id: "draft_123",
+        case_id: "case_123",
+        letter_type: "prior_auth",
+        status: "draft",
+        content_markdown: "Clinician review is required before submission.",
+        created_by: "ai",
+        approved_at: null,
+        created_at: "2026-06-18T00:00:00Z",
+        updated_at: "2026-06-18T00:00:00Z"
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const draft = await createPriorAuthDraft("case_123");
+
+    expect(draft.letter_type).toBe("prior_auth");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/cases/case_123/drafts/prior-auth",
       expect.objectContaining({ method: "POST" })
     );
   });
