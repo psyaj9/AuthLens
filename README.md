@@ -29,7 +29,7 @@ The prior-auth workflow is organized around an organization-owned case:
 
 Implemented:
 
-- Self-service registration, login, forgot-password, reset-password, JWT auth with reset-driven token invalidation, production reset-delivery gating, RBAC, and organization isolation.
+- Self-service registration, login, forgot-password, reset-password, JWT auth with reset-driven token invalidation, production reset delivery through SMTP or external webhook handoff, RBAC, and organization isolation.
 - SQLAlchemy and Alembic persistence with SQLite for local/tests and Postgres-compatible deployment.
 - Organization-scoped cases, typed documents, document pages, document chunks, analysis runs, criteria, evidence matches, readiness reports, drafts, citation checks, and audit events.
 - Pinecone vector indexing for uploaded PDF chunks, with database records as the source of truth.
@@ -43,8 +43,8 @@ Implemented:
 
 Next implementation phases:
 
-- Grow the synthetic eval dataset beyond the 3-case smoke set while preserving criteria, evidence-status, missing-item, and prompt-injection scoring.
-- Complete Codex Security scans and production deployment smoke gates; dependency-audit CI gates are now in place.
+- Continue growing the synthetic eval dataset beyond the expanded 12-case local gate while preserving criteria, evidence-status, missing-item, appeal, and prompt-injection scoring.
+- Keep Codex Security and live deployment smoke gates in the release checklist before production use.
 - Defer OCR, async workers, object storage, admin analytics, EHR/FHIR, payer submission, and real PHI readiness until after the MVP is stable.
 
 ## Runtime Architecture
@@ -72,7 +72,7 @@ Design rules:
 - Backend routes enforce JWT auth, role checks, and `organization_id` filtering.
 - Production config fails closed for missing `JWT_SECRET`, invalid CORS configuration, and internal-token mismatches.
 - Password resets increment a per-user token version, so access tokens issued before the reset are rejected on subsequent authenticated requests.
-- Production forgot-password requests fail closed with `503` unless `PASSWORD_RESET_DELIVERY_MODE` is set to an accepted delivery mode.
+- Production forgot-password requests fail closed with `503` unless `PASSWORD_RESET_DELIVERY_MODE` and the selected provider config are set. Reset-token rows are committed only after SMTP delivery or external webhook handoff succeeds.
 
 ## Structured LLM Gateway
 
@@ -97,13 +97,13 @@ Current scope:
 - Criteria extraction, evidence matching, and readiness report generation have opt-in LLM branches behind `PRIORAUTH_ANALYSIS_MODE=llm`; deterministic analysis stays active by default and does not require a live LLM call.
 - LLM evidence matching cites patient documents only. The service grounds each cited file, page, and quote to organization-scoped patient-document chunks before replacing stored matches.
 - LLM readiness keeps deterministic documentation-completeness scoring as the source of truth; the model can structure the summary, highest-risk items, and reviewer next steps.
-- The synthetic smoke eval runner now scores expected criteria coverage, evidence status outcomes, missing-item recall, prompt-injection handling, readiness status, draft safety, and citation verification. It forces deterministic analysis so the offline smoke gate never calls a live LLM provider.
+- The synthetic eval runner now uses an expanded 12-case set and scores expected criteria coverage, evidence status outcomes, missing-item recall, prompt-injection handling, appeal draft type, readiness status, draft safety, and citation verification. It forces deterministic analysis so the offline smoke gate never calls a live LLM provider.
 - Failed structured output stores schema/error-type metadata only. Raw PDF text, raw model output, and provider exception text are not stored in failure metadata.
 - `PRIORAUTH_LLM_MODEL` selects the structured-analysis Groq model when set; otherwise the gateway falls back to `GROQ_MODEL`, then `llama-3.1-8b-instant`.
 
 Remaining Phase 4 work:
 
-- Grow the synthetic eval dataset toward the PRD target set: more payer policies, patient packets, denial letters, gold criteria, gold evidence matches, gold missing items, and letter constraints.
+- Continue growing the synthetic eval dataset toward the full PRD target set: more payer policies, patient packets, denial letters, gold criteria, gold evidence matches, gold missing items, and letter constraints.
 
 ## Prior-Auth Workflow
 
@@ -238,7 +238,16 @@ Backend variables:
 | `DATABASE_URL` | Production | Defaults to local SQLite at `server/authlens.db`; use Postgres for deployment. |
 | `JWT_SECRET` | Production | Required when `ENVIRONMENT=production`; local/test runs use a non-production fallback if unset. |
 | `INTERNAL_API_TOKEN` | Production | Shared service token for client-to-backend calls when the backend enforces internal auth. |
-| `PASSWORD_RESET_DELIVERY_MODE` | Production for forgot-password | Set to `email` or `external` before enabling forgot-password in production. If unset, production reset requests fail closed with 503 and no reset token is created. Non-production keeps returning a reset token for local testing. |
+| `PASSWORD_RESET_DELIVERY_MODE` | Production for forgot-password | Set to `email` or `external` before enabling forgot-password in production. If unset or invalid, production reset requests fail closed with 503 and no reset token is created. Non-production keeps returning a reset token for local testing. |
+| `PASSWORD_RESET_PUBLIC_BASE_URL` | Production reset delivery | Public client base URL used to build reset links, for example the Vercel app URL. |
+| `PASSWORD_RESET_SMTP_HOST` | Email mode | SMTP host used when `PASSWORD_RESET_DELIVERY_MODE=email`. |
+| `PASSWORD_RESET_SMTP_PORT` | Email mode | SMTP port, usually `587`. |
+| `PASSWORD_RESET_SMTP_USERNAME` | Email mode | SMTP username. |
+| `PASSWORD_RESET_SMTP_PASSWORD` | Email mode | SMTP password or provider token. |
+| `PASSWORD_RESET_EMAIL_FROM` | Email mode | Sender address for reset emails. |
+| `PASSWORD_RESET_SMTP_USE_TLS` | Email mode | Defaults to `true`; set to `false` only if the provider requires plain SMTP inside a trusted network. |
+| `PASSWORD_RESET_EXTERNAL_WEBHOOK_URL` | External mode | HTTPS endpoint that receives reset-link handoff payloads when `PASSWORD_RESET_DELIVERY_MODE=external`. |
+| `PASSWORD_RESET_EXTERNAL_WEBHOOK_TOKEN` | External mode | Bearer token sent to the external reset handoff endpoint. |
 | `MAX_UPLOAD_MB` | No | Upload size limit in megabytes. |
 | `MAX_UPLOAD_FILES` | No | Maximum uploaded files per request. |
 | `MAX_PDF_PAGES` | No | Maximum pages accepted from a parsed PDF before indexing; defaults to `25`. |
@@ -275,6 +284,8 @@ Do not use `NEXT_PUBLIC_BACKEND_API_URL` for the backend service URL. Keep the b
 Use a managed Postgres `DATABASE_URL` for deployed environments. Keep SQLite for local and test use only. Render environment variables marked `sync: false` must be entered in the Render dashboard.
 
 Set `PASSWORD_RESET_DELIVERY_MODE=email` when a real email provider sends reset links, or `PASSWORD_RESET_DELIVERY_MODE=external` when an external operational process handles reset delivery. Leave it unset in production only if forgot-password should fail closed.
+
+Email mode requires `PASSWORD_RESET_PUBLIC_BASE_URL`, `PASSWORD_RESET_SMTP_HOST`, `PASSWORD_RESET_SMTP_PORT`, `PASSWORD_RESET_SMTP_USERNAME`, `PASSWORD_RESET_SMTP_PASSWORD`, `PASSWORD_RESET_EMAIL_FROM`, and optionally `PASSWORD_RESET_SMTP_USE_TLS`. External mode requires `PASSWORD_RESET_PUBLIC_BASE_URL`, `PASSWORD_RESET_EXTERNAL_WEBHOOK_URL`, and `PASSWORD_RESET_EXTERNAL_WEBHOOK_TOKEN`. The backend never returns production reset tokens to the browser and rolls back the reset-token row if delivery fails.
 
 Keep `ENABLE_LEGACY_QA=false` in production unless you intentionally need the original PDF Q&A demo routes. The prior-auth workspace uses case-scoped document upload and organization-scoped retrieval; the legacy Q&A route is compatibility/debug-only.
 
@@ -388,7 +399,7 @@ Immediate next phases are tracked in `tasks/todo.md` and `docs/superpowers/plans
 2. Phase 1 - Implemented: reviewer workspace controls for criteria, evidence, draft, citation, and approval review.
 3. Phase 2 - Implemented: readiness, letter, and packet exports with markdown downloads and packet manifests.
 4. Phase 3 - Implemented: denial-letter appeal workflow with appeal-case checks and denial-letter citation verification.
-5. Phase 4 - In progress: structured Groq provider boundary, opt-in criteria/evidence/readiness branches, and expanded smoke-eval scoring are implemented; larger PRD eval dataset growth remains.
-6. Phase 5 - In progress: password-reset session invalidation, production reset-delivery gating, synthetic eval CI, and dependency-audit CI are implemented; Codex Security scans and deployment smoke gates remain.
+5. Phase 4 - In progress: structured Groq provider boundary, opt-in criteria/evidence/readiness branches, expanded eval scoring, and the 12-case synthetic gate are implemented; larger PRD eval dataset growth remains.
+6. Phase 5 - In progress: password-reset session invalidation, production reset delivery, synthetic eval CI, dependency-audit CI, Codex Security scan fixes, and deployment smoke scripting are implemented; final release verification remains.
 
 Deferred capabilities include OCR fallback, async processing workers, object storage, admin analytics, EHR/FHIR integration, payer submission, and real PHI production readiness.

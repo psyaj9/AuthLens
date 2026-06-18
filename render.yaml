@@ -31,6 +31,24 @@ services:
         sync: false
       - key: PASSWORD_RESET_DELIVERY_MODE
         sync: false
+      - key: PASSWORD_RESET_PUBLIC_BASE_URL
+        sync: false
+      - key: PASSWORD_RESET_SMTP_HOST
+        sync: false
+      - key: PASSWORD_RESET_SMTP_PORT
+        value: "587"
+      - key: PASSWORD_RESET_SMTP_USERNAME
+        sync: false
+      - key: PASSWORD_RESET_SMTP_PASSWORD
+        sync: false
+      - key: PASSWORD_RESET_EMAIL_FROM
+        sync: false
+      - key: PASSWORD_RESET_SMTP_USE_TLS
+        value: "true"
+      - key: PASSWORD_RESET_EXTERNAL_WEBHOOK_URL
+        sync: false
+      - key: PASSWORD_RESET_EXTERNAL_WEBHOOK_TOKEN
+        sync: false
       - key: MAX_UPLOAD_MB
         value: "10"
       - key: MAX_UPLOAD_FILES

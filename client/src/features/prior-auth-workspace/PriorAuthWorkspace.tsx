@@ -192,6 +192,15 @@ function LoginPanel({
   const [password, setPassword] = useState("");
   const [resetToken, setResetToken] = useState("");
 
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("reset_token");
+    if (token) {
+      setResetToken(token);
+      setMode("reset");
+      setCredentialsEditable(true);
+    }
+  }, []);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (mode === "register") {
