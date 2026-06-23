@@ -1473,6 +1473,7 @@ function WorkflowStepper({
                       ? "border-transparent text-emerald-300 hover:bg-emerald-500/5"
                       : "border-transparent text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
                 )}
+                data-testid={`workflow-step-${step.id}`}
                 onClick={() => onSetActiveStep(step.id)}
                 type="button"
               >

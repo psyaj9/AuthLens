@@ -197,6 +197,13 @@ async function openCase(page: Page, caseId = "case_1") {
   await page.getByTestId(`case-card-${caseId}`).click();
 }
 
+async function goToWorkflowStep(
+  page: Page,
+  step: "criteria" | "evidence" | "readiness" | "draft" | "review"
+) {
+  await page.getByTestId(`workflow-step-${step}`).click();
+}
+
 test.describe("PriorAuth Evidence Copilot", () => {
   test("renders account login as the first screen without static credentials", async ({ page }) => {
     await page.goto("/");
@@ -236,26 +243,26 @@ test.describe("PriorAuth Evidence Copilot", () => {
     await expect(page.getByRole("heading", { name: "Lumbar spine MRI" })).toBeVisible();
     await expect(page.getByText("SYN-LMRI-REVIEW")).toBeVisible();
 
-    await page.getByRole("button", { name: /Criteria/ }).click();
+    await goToWorkflowStep(page, "criteria");
     await expect(page.getByRole("button", { name: "Save criterion review" })).toBeVisible();
     await expect(page.getByText("policy.pdf, page 1")).toBeVisible();
 
-    await page.getByRole("button", { name: /Evidence/ }).click();
+    await goToWorkflowStep(page, "evidence");
     await expect(page.getByRole("button", { name: "Save evidence override" })).toBeVisible();
     await expect(page.getByText("Six weeks of therapy are documented.")).toBeVisible();
 
-    await page.getByRole("button", { name: /Draft/ }).click();
+    await goToWorkflowStep(page, "draft");
     await expect(page.getByRole("button", { name: "Save draft edits" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Verify citations" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve draft" })).toBeDisabled();
 
     await page.getByRole("button", { name: "Verify citations" }).click();
     await expect(page.getByText("Unsupported claims")).toBeVisible();
-    await page.getByRole("button", { name: /Draft/ }).click();
+    await goToWorkflowStep(page, "draft");
     await expect(page.getByRole("button", { name: "Approve draft" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Approve draft" }).click();
-    await page.getByRole("button", { name: /Review/ }).click();
+    await goToWorkflowStep(page, "review");
     await expect(page.getByRole("button", { name: "Export readiness" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Export letter" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Export packet" })).toBeEnabled();
@@ -289,7 +296,7 @@ test.describe("PriorAuth Evidence Copilot", () => {
 
     await openCase(page);
     await expect(page.getByText("SYN-LMRI-APPEAL")).toBeVisible();
-    await page.getByRole("button", { name: /Draft/ }).click();
+    await goToWorkflowStep(page, "draft");
     await expect(page.getByRole("button", { name: "Draft appeal" })).toBeVisible();
 
     await page.getByRole("button", { name: "Draft appeal" }).click();
@@ -427,7 +434,7 @@ test.describe("PriorAuth Evidence Copilot", () => {
     await page.goto("/");
 
     await openCase(page, "case_ready");
-    await page.getByRole("button", { name: /Readiness/ }).click();
+    await goToWorkflowStep(page, "readiness");
     await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Generate", exact: true }).click();
     await expect(readinessPanel.getByText("Case one readiness summary.")).toBeVisible();
@@ -435,7 +442,7 @@ test.describe("PriorAuth Evidence Copilot", () => {
 
     await page.getByRole("button", { name: "Cases" }).first().click();
     await openCase(page, "case_blank");
-    await page.getByRole("button", { name: /Readiness/ }).click();
+    await goToWorkflowStep(page, "readiness");
 
     await expect(page.getByText("SYN-LMRI-BLANK")).toBeVisible();
     await expect(readinessPanel.getByText("Generate a readiness report after matching evidence.")).toBeVisible();

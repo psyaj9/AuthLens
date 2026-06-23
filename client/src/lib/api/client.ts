@@ -306,7 +306,7 @@ export async function generateReadinessReport(
 export async function getLatestReadinessReport(
   caseId: string
 ): Promise<ReadinessReport | null> {
-  const response = await fetch(`/api/cases/${caseId}/reports/latest`, {
+  const response = await fetch(`/api/cases/${encodeURIComponent(caseId)}/reports/latest`, {
     cache: "no-store"
   });
   if (response.status === 404) {
@@ -387,7 +387,7 @@ export async function createPacketExport(caseId: string): Promise<ExportArtifact
 }
 
 export async function listCaseAudit(caseId: string): Promise<AuditEvent[]> {
-  const response = await fetch(`/api/cases/${caseId}/audit`, {
+  const response = await fetch(`/api/cases/${encodeURIComponent(caseId)}/audit`, {
     cache: "no-store"
   });
   const payload = await parseLocalRouteResponse(response, auditEventListSchema);

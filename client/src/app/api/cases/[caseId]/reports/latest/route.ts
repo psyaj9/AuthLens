@@ -6,7 +6,7 @@ type RouteContext = {
 
 export async function GET(request: Request, context: RouteContext) {
   const { caseId } = await context.params;
-  return proxyBackendJson(request, `/api/cases/${caseId}/reports/latest`, {
+  return proxyBackendJson(request, `/api/cases/${encodeURIComponent(caseId)}/reports/latest`, {
     method: "GET",
     headers: authHeaders(request)
   });
