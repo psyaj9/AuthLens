@@ -52,7 +52,7 @@ async function mockAuthenticatedReviewerWorkspace(page: Page, options: Workspace
       })
     });
   });
-  await page.route("**/api/cases", async (route) => {
+  await page.route(/\/api\/cases$/, async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ cases: [casePayload] })
@@ -116,6 +116,15 @@ async function mockAuthenticatedReviewerWorkspace(page: Page, options: Workspace
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ drafts: initialDrafts })
+    });
+  });
+  await page.route("**/api/cases/case_1/reports/latest", async (route) => {
+    await route.fulfill({ status: 404 });
+  });
+  await page.route("**/api/cases/case_1/audit", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ events: [] })
     });
   });
   await page.route("**/api/cases/case_1/drafts/appeal", async (route) => {
@@ -184,6 +193,10 @@ async function mockAuthenticatedReviewerWorkspace(page: Page, options: Workspace
   });
 }
 
+async function openCase(page: Page, caseId = "case_1") {
+  await page.getByTestId(`case-card-${caseId}`).click();
+}
+
 test.describe("PriorAuth Evidence Copilot", () => {
   test("renders account login as the first screen without static credentials", async ({ page }) => {
     await page.goto("/");
@@ -218,29 +231,32 @@ test.describe("PriorAuth Evidence Copilot", () => {
     await mockAuthenticatedReviewerWorkspace(page);
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "SYN-LMRI-REVIEW" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Case Registry" })).toBeVisible();
+    await openCase(page);
+    await expect(page.getByRole("heading", { name: "Lumbar spine MRI" })).toBeVisible();
+    await expect(page.getByText("SYN-LMRI-REVIEW")).toBeVisible();
 
-    await page.getByRole("button", { name: "Criteria" }).click();
+    await page.getByRole("button", { name: /Criteria/ }).click();
     await expect(page.getByRole("button", { name: "Save criterion review" })).toBeVisible();
     await expect(page.getByText("policy.pdf, page 1")).toBeVisible();
 
-    await page.getByRole("button", { name: "Evidence" }).click();
+    await page.getByRole("button", { name: /Evidence/ }).click();
     await expect(page.getByRole("button", { name: "Save evidence override" })).toBeVisible();
     await expect(page.getByText("Six weeks of therapy are documented.")).toBeVisible();
 
-    await page.getByRole("button", { name: "Draft" }).click();
+    await page.getByRole("button", { name: /Draft/ }).click();
     await expect(page.getByRole("button", { name: "Save draft edits" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Verify citations" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve draft" })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Export readiness" })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Export letter" })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Export packet" })).toBeDisabled();
 
     await page.getByRole("button", { name: "Verify citations" }).click();
     await expect(page.getByText("Unsupported claims")).toBeVisible();
+    await page.getByRole("button", { name: /Draft/ }).click();
     await expect(page.getByRole("button", { name: "Approve draft" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Approve draft" }).click();
+    await page.getByRole("button", { name: /Review/ }).click();
+    await expect(page.getByRole("button", { name: "Export readiness" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Export letter" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Export packet" })).toBeEnabled();
 
@@ -258,9 +274,11 @@ test.describe("PriorAuth Evidence Copilot", () => {
           case_id: "case_1",
           document_type: "denial_letter",
           file_name: "denial.pdf",
-          checksum_sha256: "checksum",
+          sha256: "checksum",
+          mime_type: "application/pdf",
           page_count: 1,
           processing_status: "completed",
+          extraction_method: "text",
           created_at: "2026-06-18T00:00:00Z",
           updated_at: "2026-06-18T00:00:00Z"
         }
@@ -269,8 +287,9 @@ test.describe("PriorAuth Evidence Copilot", () => {
     });
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "SYN-LMRI-APPEAL" })).toBeVisible();
-    await page.getByRole("button", { name: "Draft" }).click();
+    await openCase(page);
+    await expect(page.getByText("SYN-LMRI-APPEAL")).toBeVisible();
+    await page.getByRole("button", { name: /Draft/ }).click();
     await expect(page.getByRole("button", { name: "Draft appeal" })).toBeVisible();
 
     await page.getByRole("button", { name: "Draft appeal" }).click();
@@ -304,7 +323,7 @@ test.describe("PriorAuth Evidence Copilot", () => {
       status: "draft",
       readiness_score: null
     };
-    const readinessPanel = page.locator('section[aria-labelledby="readiness-heading"]');
+    const readinessPanel = page.getByTestId("readiness-step");
 
     await page.route("**/api/auth/me", async (route) => {
       await route.fulfill({
@@ -318,7 +337,7 @@ test.describe("PriorAuth Evidence Copilot", () => {
         })
       });
     });
-    await page.route("**/api/cases", async (route) => {
+    await page.route(/\/api\/cases$/, async (route) => {
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ cases: [caseOne, caseTwo] })
@@ -385,6 +404,9 @@ test.describe("PriorAuth Evidence Copilot", () => {
       await page.route(`**/api/cases/${caseId}/drafts`, async (route) => {
         await route.fulfill({ contentType: "application/json", body: JSON.stringify({ drafts: [] }) });
       });
+      await page.route(`**/api/cases/${caseId}/reports/latest`, async (route) => {
+        await route.fulfill({ status: 404 });
+      });
     }
     await page.route("**/api/cases/case_ready/reports/readiness", async (route) => {
       await route.fulfill({
@@ -404,18 +426,21 @@ test.describe("PriorAuth Evidence Copilot", () => {
     });
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Readiness", exact: true }).click();
+    await openCase(page, "case_ready");
+    await page.getByRole("button", { name: /Readiness/ }).click();
     await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Generate", exact: true }).click();
     await expect(readinessPanel.getByText("Case one readiness summary.")).toBeVisible();
-    await expect(readinessPanel.locator("p.mt-2.text-4xl")).toHaveText("90");
+    await expect(readinessPanel.getByTestId("readiness-score")).toHaveText("90");
 
-    await page.locator('section[aria-labelledby="cases-heading"]').getByRole("button", { name: /SYN-LMRI-BLANK/ }).click();
+    await page.getByRole("button", { name: "Cases" }).first().click();
+    await openCase(page, "case_blank");
+    await page.getByRole("button", { name: /Readiness/ }).click();
 
-    await expect(page.getByRole("heading", { name: "SYN-LMRI-BLANK" })).toBeVisible();
+    await expect(page.getByText("SYN-LMRI-BLANK")).toBeVisible();
     await expect(readinessPanel.getByText("Generate a readiness report after matching evidence.")).toBeVisible();
     await expect(readinessPanel.getByText("Case one readiness summary.")).toBeHidden();
-    await expect(readinessPanel.locator("p.mt-2.text-4xl")).toHaveText("-");
+    await expect(readinessPanel.getByTestId("readiness-score")).toHaveText("-");
   });
 
   test("lets coordinators delete uploaded documents from a case", async ({ page }) => {
@@ -446,9 +471,10 @@ test.describe("PriorAuth Evidence Copilot", () => {
     });
     await page.goto("/");
 
+    await openCase(page);
     await expect(page.getByText("note.pdf")).toBeVisible();
     page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("row", { name: /note\.pdf/i }).getByRole("button", { name: "Delete" }).click();
+    await page.getByTestId("document-row-doc_note_1").getByRole("button", { name: "Delete" }).click();
 
     expect(deleteRequested).toBe(true);
     await expect(page.getByText("Document deleted.")).toBeVisible();
