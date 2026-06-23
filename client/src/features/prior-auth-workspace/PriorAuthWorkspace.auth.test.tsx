@@ -66,6 +66,7 @@ describe("PriorAuthWorkspace auth panel", () => {
     render(<PriorAuthWorkspace />);
 
     await user.click(await screen.findByRole("button", { name: "Create account" }));
+    expect(screen.getByRole("button", { name: "Sign in" }).parentElement).toHaveClass("sm:grid-cols-1");
 
     const password = screen.getByLabelText("Password");
     const confirmPassword = screen.getByLabelText("Confirm password");
@@ -73,10 +74,11 @@ describe("PriorAuthWorkspace auth panel", () => {
     expect(password).toHaveAttribute("type", "password");
     expect(confirmPassword).toHaveAttribute("type", "password");
 
-    await user.click(screen.getByRole("button", { name: "Show password" }));
+    await user.click(screen.getAllByRole("button", { name: "Show" })[0]);
 
     expect(password).toHaveAttribute("type", "text");
     expect(confirmPassword).toHaveAttribute("type", "text");
+    expect(screen.queryByRole("button", { name: "Show password" })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Name"), "Athikash");
     await user.type(screen.getByLabelText("Organization"), "psyaj9");

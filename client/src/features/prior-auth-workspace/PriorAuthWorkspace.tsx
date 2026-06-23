@@ -1,6 +1,6 @@
-"use client";
-
-import { ButtonHTMLAttributes, ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useState } from "react";
+"use client"; 
+ 
+import { ButtonHTMLAttributes, ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useId, useMemo, useState } from "react"; 
 import {
   Activity,
   AlertTriangle,
@@ -456,34 +456,30 @@ function LoginPanel({
           )} 
           {mode !== "forgot" ? ( 
             <div className="flex flex-col gap-3"> 
-              <DarkField 
+              <PasswordField 
                 autoComplete={mode === "login" ? "off" : "new-password"} 
                 label="Password" 
                 onChange={setPassword} 
                 onFocus={() => setCredentialsEditable(true)} 
                 readOnly={credentialsReadOnly} 
                 required 
+                showPassword={showPassword} 
+                togglePassword={() => setShowPassword((current) => !current)} 
                 type={passwordType} 
                 value={password} 
               /> 
               {mode === "register" ? ( 
-                <DarkField 
+                <PasswordField 
                   autoComplete="new-password" 
                   label="Confirm password" 
                   onChange={setConfirmPassword} 
                   required 
+                  showPassword={showPassword} 
+                  togglePassword={() => setShowPassword((current) => !current)} 
                   type={passwordType} 
                   value={confirmPassword} 
                 /> 
               ) : null} 
-              <ButtonLike 
-                className="min-h-9 self-start px-3" 
-                onClick={() => setShowPassword((current) => !current)} 
-                variant="secondary" 
-              > 
-                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />} 
-                {showPassword ? "Hide password" : "Show password"} 
-              </ButtonLike> 
             </div> 
           ) : null} 
           {visibleMessage ? ( 
@@ -503,7 +499,7 @@ function LoginPanel({
             <ShieldCheck className="size-4" />
             {title}
           </ButtonLike>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className={cx("grid grid-cols-1 gap-2", mode === "login" || mode === "forgot" ? "sm:grid-cols-2" : "sm:grid-cols-1")}> 
             {mode === "login" ? ( 
               <> 
                 <ButtonLike onClick={() => setAuthMode("register")} variant="secondary">Create account</ButtonLike> 
@@ -520,7 +516,7 @@ function LoginPanel({
   );
 }
 
-function DarkField({
+function DarkField({ 
   autoComplete,
   label,
   onChange,
@@ -554,10 +550,66 @@ function DarkField({
         value={value} 
       />
     </label>
-  );
-}
-
-export function PriorAuthWorkspace() {
+  ); 
+} 
+ 
+function PasswordField({ 
+  autoComplete, 
+  label, 
+  onChange, 
+  onFocus, 
+  readOnly, 
+  required, 
+  showPassword, 
+  togglePassword, 
+  type, 
+  value 
+}: { 
+  autoComplete?: string; 
+  label: string; 
+  onChange: (value: string) => void; 
+  onFocus?: () => void; 
+  readOnly?: boolean; 
+  required?: boolean; 
+  showPassword: boolean; 
+  togglePassword: () => void; 
+  type: string; 
+  value: string; 
+}) { 
+  const inputId = useId(); 
+  const toggleLabel = showPassword ? "Hide" : "Show"; 
+ 
+  return ( 
+    <div className="flex flex-col gap-2 text-sm font-semibold"> 
+      <label htmlFor={inputId}>{label}</label> 
+      <div className="relative"> 
+        <input 
+          autoComplete={autoComplete} 
+          className="min-h-10 w-full rounded border border-[var(--border)] bg-[var(--input-background)] px-3 pr-11 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]" 
+          id={inputId} 
+          onChange={(event) => onChange(event.target.value)} 
+          onFocus={onFocus} 
+          onMouseDown={onFocus} 
+          readOnly={readOnly} 
+          required={required} 
+          type={type} 
+          value={value} 
+        /> 
+        <button 
+          aria-label={toggleLabel} 
+          className="absolute inset-y-1 right-1 inline-flex w-9 items-center justify-center rounded text-[var(--muted-foreground)] transition hover:bg-[var(--muted)] hover:text-[var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]" 
+          onClick={togglePassword} 
+          title={`${toggleLabel} password`} 
+          type="button" 
+        > 
+          {showPassword ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />} 
+        </button> 
+      </div> 
+    </div> 
+  ); 
+} 
+ 
+export function PriorAuthWorkspace() { 
   const [activeStep, setActiveStep] = useState<WorkflowStep>("documents");
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [cases, setCases] = useState<CaseSummary[]>([]);

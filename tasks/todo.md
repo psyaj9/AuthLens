@@ -1,5 +1,20 @@
 # Next PRD Implementation Phases
 
+## Auth Form Submission And Layout Follow-Up
+
+- [x] Reproduce why create account and sign in still fail from the rendered form.
+- [x] Fix the create-account secondary Sign in button width.
+- [x] Add/adjust regressions for the failing auth submission path and layout behavior.
+- [x] Verify direct auth routes, rendered desktop/mobile auth flow, lint/typecheck/tests/e2e.
+
+## Review
+
+- Root cause for create account and sign in failures: the FastAPI backend was not running on `127.0.0.1:8000`, so the Next auth proxy returned generic `502` failures even though the form and auth routes were valid.
+- Confirmed the auth database was already migrated at `20260618_0004 (head)`, then started the backend and verified `GET /api/health/`, `GET /api/health`, direct register, direct login, and rendered register/login flows all succeeded.
+- Root cause for the half-width Sign in button: create-account mode rendered one secondary action inside a desktop two-column footer grid.
+- Fixed the footer grid so login/forgot modes use two columns only when they render two actions; create-account mode now keeps the secondary Sign in action full-width.
+- Verification passed: full client lint, typecheck, Vitest with 70 tests, Playwright e2e with 12 tests, direct backend/Next health probes, direct Next register/login, and rendered register/login smoke at 553x753 with equal-width create-account and sign-in buttons.
+
 ## Auth Form Origin Guard And Responsive Password UX
 
 - [x] Add regression coverage for auth POST requests that arrive with forwarded external origin headers.
@@ -13,7 +28,7 @@
 - Root cause: the CSRF/origin guard compared the browser `Origin` only with `new URL(request.url).origin`, so legitimate auth posts could be rejected when the browser-facing host/protocol arrived through forwarded proxy headers.
 - Fixed the shared proxy origin logic to accept the request URL origin plus valid `Host`/`X-Forwarded-Host` and `X-Forwarded-Proto` candidates while still rejecting mismatched origins and cross-site fetch metadata.
 - Replaced browser-facing security-control/backend failure details with generic `Request rejected.` / `Request failed.` messages while preserving HTTP status codes.
-- Added create-account password confirmation, a visible password toggle for active password fields, required auth fields, and tighter responsive wrapping/padding for the auth card header and form.
+- Added create-account password confirmation, inline eye-icon password toggles inside the active password fields, required auth fields, and tighter responsive wrapping/padding for the auth card header and form.
 - Verification passed: focused proxy/auth/UI Vitest suite, affected route suite with 46 tests, full client Vitest with 70 tests, lint, typecheck, Next production build, Playwright e2e with 12 tests, and desktop/mobile rendered smoke at 553x753 and 390x844 with no console errors.
 
 ## Case-Scoped Readiness And Appeal Export Fix
