@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  auditEventListSchema,
   caseListSchema,
   caseSchema,
   citationCheckSchema,
@@ -21,6 +22,7 @@ import {
   type DraftLetter,
   type EvidenceMatch,
   type ExportArtifact,
+  type AuditEvent,
   type ReadinessReport,
   type UserProfile
 } from "./priorauth-schemas";
@@ -301,6 +303,18 @@ export async function generateReadinessReport(
   return parseLocalRouteResponse(response, readinessReportSchema);
 }
 
+export async function getLatestReadinessReport(
+  caseId: string
+): Promise<ReadinessReport | null> {
+  const response = await fetch(`/api/cases/${caseId}/reports/latest`, {
+    cache: "no-store"
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  return parseLocalRouteResponse(response, readinessReportSchema);
+}
+
 export async function createPriorAuthDraft(caseId: string): Promise<DraftLetter> {
   const response = await fetch(`/api/cases/${caseId}/drafts/prior-auth`, {
     method: "POST"
@@ -370,4 +384,20 @@ export async function createPacketExport(caseId: string): Promise<ExportArtifact
     method: "POST"
   });
   return parseLocalRouteResponse(response, exportArtifactSchema);
+}
+
+export async function listCaseAudit(caseId: string): Promise<AuditEvent[]> {
+  const response = await fetch(`/api/cases/${caseId}/audit`, {
+    cache: "no-store"
+  });
+  const payload = await parseLocalRouteResponse(response, auditEventListSchema);
+  return payload.events;
+}
+
+export async function listOrganizationAudit(): Promise<AuditEvent[]> {
+  const response = await fetch("/api/audit", {
+    cache: "no-store"
+  });
+  const payload = await parseLocalRouteResponse(response, auditEventListSchema);
+  return payload.events;
 }

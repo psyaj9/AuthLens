@@ -12,6 +12,9 @@ import {
   createReadinessExport,
   deleteDocument,
   forgotPassword,
+  getLatestReadinessReport,
+  listCaseAudit,
+  listOrganizationAudit,
   loginUser,
   overrideEvidenceMatch,
   registerUser,
@@ -479,5 +482,74 @@ describe("client API client", () => {
       "/api/cases/case_123/exports/packet",
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("loads the latest readiness report and treats a missing report as empty state", async () => {
+    const reportPayload = {
+      id: "report_123",
+      case_id: "case_123",
+      readiness_score: 78,
+      overall_status: "needs_more_documentation",
+      summary: "Case is not submission-ready.",
+      highest_risk_items: ["EDSS score missing."],
+      recommended_next_steps: ["Upload EDSS documentation."],
+      report_json: { source: "deterministic" },
+      created_at: "2026-06-18T00:00:00Z"
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(reportPayload))
+      .mockResolvedValueOnce(Response.json({ error: "Readiness report not found" }, { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const report = await getLatestReadinessReport("case_123");
+    const missing = await getLatestReadinessReport("case_empty");
+
+    expect(report?.case_id).toBe("case_123");
+    expect(report?.readiness_score).toBe(78);
+    expect(missing).toBeNull();
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/cases/case_123/reports/latest", {
+      cache: "no-store"
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/cases/case_empty/reports/latest", {
+      cache: "no-store"
+    });
+  });
+
+  it("loads case and organization audit events through local routes", async () => {
+    const auditPayload = {
+      events: [
+        {
+          id: "audit_1",
+          organization_id: "org_1",
+          case_id: "case_123",
+          user_id: "user_1",
+          actor_type: "user",
+          action: "draft.generated",
+          entity_type: "draft_letter",
+          entity_id: "draft_123",
+          metadata: { words: 847 },
+          created_at: "2026-06-18T00:00:00Z"
+        }
+      ]
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(auditPayload))
+      .mockResolvedValueOnce(Response.json({ events: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const caseEvents = await listCaseAudit("case_123");
+    const orgEvents = await listOrganizationAudit();
+
+    expect(caseEvents).toHaveLength(1);
+    expect(caseEvents[0].metadata).toEqual({ words: 847 });
+    expect(orgEvents).toEqual([]);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/cases/case_123/audit", {
+      cache: "no-store"
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/audit", {
+      cache: "no-store"
+    });
   });
 });

@@ -161,6 +161,23 @@ export const exportArtifactSchema = z.object({
   created_at: z.string()
 });
 
+export const auditEventSchema = z.object({
+  id: z.string(),
+  organization_id: z.string(),
+  case_id: z.string().nullable().optional(),
+  user_id: z.string().nullable().optional(),
+  actor_type: z.string(),
+  action: z.string(),
+  entity_type: z.string(),
+  entity_id: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()),
+  created_at: z.string()
+});
+
+export const auditEventListSchema = z.object({
+  events: z.array(auditEventSchema)
+});
+
 export type UserProfile = z.infer<typeof userProfileSchema>;
 export type MessageResponse = z.infer<typeof messageResponseSchema>;
 export type ForgotPasswordResponse = z.infer<typeof forgotPasswordResponseSchema>;
@@ -172,3 +189,4 @@ export type ReadinessReport = z.infer<typeof readinessReportSchema>;
 export type DraftLetter = z.infer<typeof draftSchema>;
 export type CitationCheck = z.infer<typeof citationCheckSchema>;
 export type ExportArtifact = z.infer<typeof exportArtifactSchema>;
+export type AuditEvent = z.infer<typeof auditEventSchema>;
