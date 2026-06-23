@@ -5,6 +5,8 @@ import {
   backendNotConfiguredError,
   buildBackendHeaders,
   buildBackendUrl,
+  CLIENT_REQUEST_FAILED_ERROR,
+  CLIENT_REQUEST_REJECTED_ERROR,
   getBackendApiUrl,
   isCrossOriginMutation,
   legacyQaEnabled,
@@ -48,7 +50,7 @@ function sanitizeSources(sources: string[]) {
 
 export async function POST(request: Request) {
   if (isCrossOriginMutation(request)) {
-    return errorResponse("Cross-origin requests are not allowed.", 403);
+    return errorResponse(CLIENT_REQUEST_REJECTED_ERROR, 403);
   }
 
   if (!legacyQaEnabled()) {
@@ -95,6 +97,6 @@ export async function POST(request: Request) {
       source_documents: sanitizeSources(parsedResponse.source_documents)
     });
   } catch {
-    return errorResponse("AuthLens could not reach the backend.", 502);
+    return errorResponse(CLIENT_REQUEST_FAILED_ERROR, 502);
   }
 }

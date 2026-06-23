@@ -136,7 +136,7 @@ describe("POST /api/query", () => {
     );
 
     await expect(response.json()).resolves.toEqual({
-      error: "Cross-origin requests are not allowed."
+      error: "Request rejected."
     });
     expect(response.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe("POST /api/query", () => {
     );
 
     await expect(response.json()).resolves.toEqual({
-      error: "Cross-origin requests are not allowed."
+      error: "Request rejected."
     });
     expect(response.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -185,7 +185,7 @@ describe("POST /api/query", () => {
     );
 
     await expect(response.json()).resolves.toEqual({
-      error: "AuthLens could not reach the backend."
+      error: "Request failed."
     });
     expect(response.status).toBe(502);
   });

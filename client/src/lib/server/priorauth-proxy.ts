@@ -5,7 +5,10 @@ import { NextResponse } from "next/server";
 import {
   backendNotConfiguredError,
   buildBackendUrl,
+  CLIENT_REQUEST_FAILED_ERROR,
+  CLIENT_REQUEST_REJECTED_ERROR,
   getBackendApiUrl,
+  isCrossOriginMutation,
   normalizeBackendError,
   readJsonOrText
 } from "./backend-proxy";
@@ -54,15 +57,8 @@ export function errorResponse(error: string, status: number) {
 }
 
 export function rejectCrossOriginMutation(request: Request) {
-  const origin = request.headers.get("origin");
-  const requestOrigin = new URL(request.url).origin;
-  if (origin && origin !== requestOrigin) {
-    return errorResponse("Cross-origin requests are not allowed.", 403);
-  }
-
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") {
-    return errorResponse("Cross-origin requests are not allowed.", 403);
+  if (isCrossOriginMutation(request)) {
+    return errorResponse(CLIENT_REQUEST_REJECTED_ERROR, 403);
   }
 
   return null;
@@ -98,6 +94,6 @@ export async function proxyBackendJson(
     const payload = await readJsonOrText(backendResponse);
     return NextResponse.json(typeof payload === "string" ? { message: payload } : payload);
   } catch {
-    return errorResponse("AuthLens could not reach the backend.", 502);
+    return errorResponse(CLIENT_REQUEST_FAILED_ERROR, 502);
   }
 }

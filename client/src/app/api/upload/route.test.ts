@@ -105,7 +105,7 @@ describe("POST /api/upload", () => {
     );
 
     await expect(response.json()).resolves.toEqual({
-      error: "Cross-origin requests are not allowed."
+      error: "Request rejected."
     });
     expect(response.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe("POST /api/upload", () => {
     );
 
     await expect(response.json()).resolves.toEqual({
-      error: "Cross-origin requests are not allowed."
+      error: "Request rejected."
     });
     expect(response.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -158,7 +158,7 @@ describe("POST /api/upload", () => {
     );
 
     await expect(response.json()).resolves.toEqual({
-      error: "AuthLens could not upload documents."
+      error: "Request failed."
     });
     expect(response.status).toBe(502);
   });

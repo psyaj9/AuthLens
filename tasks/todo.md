@@ -1,5 +1,21 @@
 # Next PRD Implementation Phases
 
+## Auth Form Origin Guard And Responsive Password UX
+
+- [x] Add regression coverage for auth POST requests that arrive with forwarded external origin headers.
+- [x] Replace security-control and backend proxy failure messages with generic client-facing errors.
+- [x] Add create-account password confirmation and password visibility controls.
+- [x] Tighten the auth panel responsive layout so narrow screens do not deform the title or controls.
+- [x] Run focused auth/proxy/UI tests plus rendered desktop/mobile checks.
+
+## Review
+
+- Root cause: the CSRF/origin guard compared the browser `Origin` only with `new URL(request.url).origin`, so legitimate auth posts could be rejected when the browser-facing host/protocol arrived through forwarded proxy headers.
+- Fixed the shared proxy origin logic to accept the request URL origin plus valid `Host`/`X-Forwarded-Host` and `X-Forwarded-Proto` candidates while still rejecting mismatched origins and cross-site fetch metadata.
+- Replaced browser-facing security-control/backend failure details with generic `Request rejected.` / `Request failed.` messages while preserving HTTP status codes.
+- Added create-account password confirmation, a visible password toggle for active password fields, required auth fields, and tighter responsive wrapping/padding for the auth card header and form.
+- Verification passed: focused proxy/auth/UI Vitest suite, affected route suite with 46 tests, full client Vitest with 70 tests, lint, typecheck, Next production build, Playwright e2e with 12 tests, and desktop/mobile rendered smoke at 553x753 and 390x844 with no console errors.
+
 ## Case-Scoped Readiness And Appeal Export Fix
 
 - [x] Add failing backend coverage for exporting an approved appeal draft.

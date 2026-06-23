@@ -12,7 +12,7 @@ describe("GET /api/health", () => {
       ok: false,
       backendConfigured: false,
       backendReachable: false,
-      error: "Backend API URL is not configured."
+      error: "Request failed."
     });
   });
 

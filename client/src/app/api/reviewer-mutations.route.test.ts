@@ -65,7 +65,7 @@ async function expectCrossOriginRejection<TParams extends Record<string, string>
 
   expect(response.status).toBe(403);
   await expect(response.json()).resolves.toEqual({
-    error: "Cross-origin requests are not allowed."
+    error: "Request rejected."
   });
   expect(fetchMock).not.toHaveBeenCalled();
 }

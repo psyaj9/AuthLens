@@ -12,9 +12,10 @@ import {
   ChevronRight,
   ClipboardCheck,
   Clock,
-  Download,
-  Eye,
-  FileSearch,
+  Download, 
+  Eye, 
+  EyeOff, 
+  FileSearch, 
   FileText,
   FolderOpen,
   HelpCircle,
@@ -376,17 +377,36 @@ function LoginPanel({
   const [initialResetToken] = useState(initialResetTokenFromLocation);
   const [email, setEmail] = useState("");
   const [credentialsEditable, setCredentialsEditable] = useState(Boolean(initialResetToken));
-  const [mode, setMode] = useState<AuthMode>(initialResetToken ? "reset" : "login");
-  const [name, setName] = useState("");
-  const [organizationName, setOrganizationName] = useState("");
-  const [password, setPassword] = useState("");
-  const [resetToken, setResetToken] = useState(initialResetToken);
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (mode === "register") {
-      onRegister({ email, password, name, organization_name: organizationName });
-    } else if (mode === "forgot") {
+  const [mode, setMode] = useState<AuthMode>(initialResetToken ? "reset" : "login"); 
+  const [name, setName] = useState(""); 
+  const [organizationName, setOrganizationName] = useState(""); 
+  const [password, setPassword] = useState(""); 
+  const [confirmPassword, setConfirmPassword] = useState(""); 
+  const [showPassword, setShowPassword] = useState(false); 
+  const [resetToken, setResetToken] = useState(initialResetToken); 
+  const [validationMessage, setValidationMessage] = useState<string>(); 
+ 
+  function setAuthMode(nextMode: AuthMode) { 
+    setMode(nextMode); 
+    setValidationMessage(undefined); 
+    setConfirmPassword(""); 
+    if (nextMode === "forgot") { 
+      setPassword(""); 
+      setShowPassword(false); 
+    } 
+  } 
+ 
+  function submit(event: FormEvent<HTMLFormElement>) { 
+    event.preventDefault(); 
+    setValidationMessage(undefined); 
+ 
+    if (mode === "register") { 
+      if (password !== confirmPassword) { 
+        setValidationMessage("Passwords do not match."); 
+        return; 
+      } 
+      onRegister({ email, password, name, organization_name: organizationName }); 
+    } else if (mode === "forgot") { 
       onForgotPassword(email);
     } else if (mode === "reset") {
       onResetPassword(resetToken, password);
@@ -395,81 +415,106 @@ function LoginPanel({
     }
   }
 
-  const title = mode === "register" ? "Create account" : mode === "forgot" ? "Forgot password" : mode === "reset" ? "Reset password" : "Sign in";
-  const credentialsReadOnly = mode === "login" && !credentialsEditable;
-
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4 py-8 text-[var(--foreground)]">
-      <section aria-labelledby="login-heading" className="w-full max-w-md rounded border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/25">
-        <div className="border-b border-[var(--border)] px-5 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex size-8 items-center justify-center rounded border border-[var(--primary)]/40 bg-[var(--primary)]/12 text-[var(--primary)]">
-              <Shield className="size-4" />
-            </div>
-            <h1 className="font-serif text-xl font-semibold" id="login-heading">PriorAuth Evidence Copilot</h1>
-          </div>
-          <p className="mt-3 text-sm text-[var(--muted-foreground)]">Synthetic or de-identified documents only.</p>
-        </div>
-        <form autoComplete="off" className="flex flex-col gap-4 p-5" onSubmit={submit}>
-          {mode === "register" ? (
-            <>
-              <DarkField label="Name" onChange={setName} type="text" value={name} />
-              <DarkField label="Organization" onChange={setOrganizationName} type="text" value={organizationName} />
-            </>
-          ) : null}
-          {mode === "reset" ? (
-            <DarkField label="Reset token" onChange={setResetToken} type="text" value={resetToken} />
-          ) : (
-            <DarkField
-              autoComplete={mode === "login" ? "off" : "email"}
-              label="Email"
-              onChange={setEmail}
-              onFocus={() => setCredentialsEditable(true)}
-              readOnly={credentialsReadOnly}
-              type="email"
-              value={email}
-            />
-          )}
-          {mode !== "forgot" ? (
-            <DarkField
-              autoComplete={mode === "login" ? "off" : "new-password"}
-              label="Password"
-              onChange={setPassword}
-              onFocus={() => setCredentialsEditable(true)}
-              readOnly={credentialsReadOnly}
-              type="password"
-              value={password}
-            />
-          ) : null}
-          {message ? (
-            <p
-              className={cx(
-                "rounded border px-3 py-2 text-sm",
-                status === "error"
-                  ? "border-rose-500/30 bg-rose-500/12 text-rose-300"
-                  : "border-emerald-500/25 bg-emerald-500/12 text-emerald-300"
-              )}
-              role={status === "error" ? "alert" : "status"}
-            >
-              {message}
-            </p>
-          ) : null}
+  const title = mode === "register" ? "Create account" : mode === "forgot" ? "Forgot password" : mode === "reset" ? "Reset password" : "Sign in"; 
+  const credentialsReadOnly = mode === "login" && !credentialsEditable; 
+  const passwordType = showPassword ? "text" : "password"; 
+  const visibleMessage = validationMessage ?? message; 
+  const visibleStatus = validationMessage ? "error" : status; 
+ 
+  return ( 
+    <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-3 py-6 text-[var(--foreground)] sm:px-4 sm:py-8"> 
+      <section aria-labelledby="login-heading" className="w-full max-w-md overflow-hidden rounded border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/25"> 
+        <div className="border-b border-[var(--border)] px-4 py-5 sm:px-5"> 
+          <div className="flex min-w-0 items-center gap-3"> 
+            <div className="flex size-8 shrink-0 items-center justify-center rounded border border-[var(--primary)]/40 bg-[var(--primary)]/12 text-[var(--primary)]"> 
+              <Shield className="size-4" /> 
+            </div> 
+            <h1 className="min-w-0 break-words font-serif text-lg font-semibold leading-tight sm:text-xl" id="login-heading">PriorAuth Evidence Copilot</h1> 
+          </div> 
+          <p className="mt-3 text-sm text-[var(--muted-foreground)]">Synthetic or de-identified documents only.</p> 
+        </div> 
+        <form autoComplete="off" className="flex flex-col gap-4 p-4 sm:p-5" onSubmit={submit}> 
+          {mode === "register" ? ( 
+            <> 
+              <DarkField label="Name" onChange={setName} required type="text" value={name} /> 
+              <DarkField label="Organization" onChange={setOrganizationName} required type="text" value={organizationName} /> 
+            </> 
+          ) : null} 
+          {mode === "reset" ? ( 
+            <DarkField label="Reset token" onChange={setResetToken} required type="text" value={resetToken} /> 
+          ) : ( 
+            <DarkField 
+              autoComplete={mode === "login" ? "off" : "email"} 
+              label="Email" 
+              onChange={setEmail} 
+              onFocus={() => setCredentialsEditable(true)} 
+              readOnly={credentialsReadOnly} 
+              required 
+              type="email" 
+              value={email} 
+            /> 
+          )} 
+          {mode !== "forgot" ? ( 
+            <div className="flex flex-col gap-3"> 
+              <DarkField 
+                autoComplete={mode === "login" ? "off" : "new-password"} 
+                label="Password" 
+                onChange={setPassword} 
+                onFocus={() => setCredentialsEditable(true)} 
+                readOnly={credentialsReadOnly} 
+                required 
+                type={passwordType} 
+                value={password} 
+              /> 
+              {mode === "register" ? ( 
+                <DarkField 
+                  autoComplete="new-password" 
+                  label="Confirm password" 
+                  onChange={setConfirmPassword} 
+                  required 
+                  type={passwordType} 
+                  value={confirmPassword} 
+                /> 
+              ) : null} 
+              <ButtonLike 
+                className="min-h-9 self-start px-3" 
+                onClick={() => setShowPassword((current) => !current)} 
+                variant="secondary" 
+              > 
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />} 
+                {showPassword ? "Hide password" : "Show password"} 
+              </ButtonLike> 
+            </div> 
+          ) : null} 
+          {visibleMessage ? ( 
+            <p 
+              className={cx( 
+                "rounded border px-3 py-2 text-sm", 
+                visibleStatus === "error" 
+                  ? "border-rose-500/30 bg-rose-500/12 text-rose-300" 
+                  : "border-emerald-500/25 bg-emerald-500/12 text-emerald-300" 
+              )} 
+              role={visibleStatus === "error" ? "alert" : "status"} 
+            > 
+              {visibleMessage} 
+            </p> 
+          ) : null} 
           <ButtonLike disabled={status === "loading"} type="submit">
             <ShieldCheck className="size-4" />
             {title}
           </ButtonLike>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {mode === "login" ? (
-              <>
-                <ButtonLike onClick={() => setMode("register")} variant="secondary">Create account</ButtonLike>
-                <ButtonLike onClick={() => setMode("forgot")} variant="secondary">Forgot password</ButtonLike>
-              </>
-            ) : (
-              <ButtonLike onClick={() => setMode("login")} variant="secondary">Sign in</ButtonLike>
-            )}
-            {mode === "forgot" ? <ButtonLike onClick={() => setMode("reset")} variant="secondary">Reset password</ButtonLike> : null}
-          </div>
-        </form>
+            {mode === "login" ? ( 
+              <> 
+                <ButtonLike onClick={() => setAuthMode("register")} variant="secondary">Create account</ButtonLike> 
+                <ButtonLike onClick={() => setAuthMode("forgot")} variant="secondary">Forgot password</ButtonLike> 
+              </> 
+            ) : ( 
+              <ButtonLike onClick={() => setAuthMode("login")} variant="secondary">Sign in</ButtonLike> 
+            )} 
+            {mode === "forgot" ? <ButtonLike onClick={() => setAuthMode("reset")} variant="secondary">Reset password</ButtonLike> : null} 
+          </div> 
+        </form> 
       </section>
     </main>
   );
@@ -479,19 +524,21 @@ function DarkField({
   autoComplete,
   label,
   onChange,
-  onFocus,
-  readOnly,
-  type,
-  value
-}: {
+  onFocus, 
+  readOnly, 
+  required, 
+  type, 
+  value 
+}: { 
   autoComplete?: string;
   label: string;
-  onChange: (value: string) => void;
-  onFocus?: () => void;
-  readOnly?: boolean;
-  type: string;
-  value: string;
-}) {
+  onChange: (value: string) => void; 
+  onFocus?: () => void; 
+  readOnly?: boolean; 
+  required?: boolean; 
+  type: string; 
+  value: string; 
+}) { 
   return (
     <label className="flex flex-col gap-2 text-sm font-semibold">
       {label}
@@ -499,11 +546,12 @@ function DarkField({
         autoComplete={autoComplete}
         className="min-h-10 rounded border border-[var(--border)] bg-[var(--input-background)] px-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]"
         onChange={(event) => onChange(event.target.value)}
-        onFocus={onFocus}
-        onMouseDown={onFocus}
-        readOnly={readOnly}
-        type={type}
-        value={value}
+        onFocus={onFocus} 
+        onMouseDown={onFocus} 
+        readOnly={readOnly} 
+        required={required} 
+        type={type} 
+        value={value} 
       />
     </label>
   );

@@ -21,7 +21,7 @@ describe("/api/cases route", () => {
     const response = await POST(request);
 
     await expect(response.json()).resolves.toEqual({
-      error: "Cross-origin requests are not allowed."
+      error: "Request rejected."
     });
     expect(response.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();

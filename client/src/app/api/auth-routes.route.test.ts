@@ -6,10 +6,14 @@ afterEach(() => {
   vi.resetModules();
 });
 
-function authRequest(path: string, body: Record<string, string>) {
+function authRequest(
+  path: string,
+  body: Record<string, string>,
+  headers: Record<string, string> = {}
+) {
   return new Request(`http://localhost${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body)
   });
 }
@@ -68,5 +72,41 @@ describe("browser auth proxy routes", () => {
     });
     expect(response.status).toBe(201);
     expect(response.headers.get("set-cookie")).toContain("authlens_demo_token=jwt-token");
+  });
+
+  it("accepts login requests when forwarded headers identify the browser origin", async () => {
+    process.env.BACKEND_API_URL = "https://backend.example.test";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          access_token: "jwt-token",
+          user: { id: "user_123", email: "user@example.test" }
+        })
+      )
+    );
+
+    const loginRoute = await import("./auth/login/route");
+    const response = await loginRoute.POST(
+      new Request("http://127.0.0.1:3000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://authlens.example.test",
+          "Sec-Fetch-Site": "same-origin",
+          "X-Forwarded-Host": "authlens.example.test",
+          "X-Forwarded-Proto": "https"
+        },
+        body: JSON.stringify({
+          email: "user@example.test",
+          password: "test-password"
+        })
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      user: { id: "user_123", email: "user@example.test" }
+    });
   });
 });

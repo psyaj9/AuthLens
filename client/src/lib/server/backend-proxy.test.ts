@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  backendNotConfiguredError,
   buildBackendHeaders,
   buildBackendUrl,
   getBackendApiUrl,
@@ -43,7 +44,7 @@ describe("backend proxy helpers", () => {
     const response = Response.json({ error: "Pinecone unavailable" }, { status: 502 });
 
     await expect(normalizeBackendError(response)).resolves.toEqual({
-      error: "Pinecone unavailable",
+      error: "Request failed.",
       status: 502
     });
   });
@@ -52,8 +53,15 @@ describe("backend proxy helpers", () => {
     const response = new Response("gateway timeout", { status: 504 });
 
     await expect(normalizeBackendError(response)).resolves.toEqual({
-      error: "gateway timeout",
+      error: "Request failed.",
       status: 504
+    });
+  });
+
+  it("does not expose missing backend configuration details to clients", () => {
+    expect(backendNotConfiguredError()).toEqual({
+      error: "Request failed.",
+      status: 503
     });
   });
 

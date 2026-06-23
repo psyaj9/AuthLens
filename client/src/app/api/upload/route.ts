@@ -4,6 +4,8 @@ import {
   backendNotConfiguredError,
   buildBackendHeaders,
   buildBackendUrl,
+  CLIENT_REQUEST_FAILED_ERROR,
+  CLIENT_REQUEST_REJECTED_ERROR,
   getBackendApiUrl,
   isCrossOriginMutation,
   legacyQaEnabled,
@@ -28,7 +30,7 @@ function errorResponse(error: string, status: number) {
 
 export async function POST(request: Request) {
   if (isCrossOriginMutation(request)) {
-    return errorResponse("Cross-origin requests are not allowed.", 403);
+    return errorResponse(CLIENT_REQUEST_REJECTED_ERROR, 403);
   }
 
   if (!legacyQaEnabled()) {
@@ -83,6 +85,6 @@ export async function POST(request: Request) {
       typeof payload === "string" ? { message: payload } : payload
     );
   } catch {
-    return errorResponse("AuthLens could not upload documents.", 502);
+    return errorResponse(CLIENT_REQUEST_FAILED_ERROR, 502);
   }
 }

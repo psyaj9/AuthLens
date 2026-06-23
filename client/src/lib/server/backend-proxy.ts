@@ -30,6 +30,8 @@ const qaResponseSchema = z.object({
 const LOCAL_DEV_BACKEND_API_URL = "http://127.0.0.1:8000";
 const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
 const FALSY_ENV_VALUES = new Set(["0", "false", "no", "off"]);
+export const CLIENT_REQUEST_FAILED_ERROR = "Request failed.";
+export const CLIENT_REQUEST_REJECTED_ERROR = "Request rejected.";
 
 export function getBackendApiUrl() {
   const value = process.env.BACKEND_API_URL?.trim();
@@ -77,10 +79,59 @@ export function buildBackendHeaders(
   };
 }
 
+function firstHeaderValue(value: string | null) {
+  return value?.split(",")[0]?.trim() || undefined;
+}
+
+function normalizeProtocol(value: string | undefined) {
+  const protocol = value?.trim().replace(/:$/, "").toLowerCase();
+  return protocol === "http" || protocol === "https" ? protocol : undefined;
+}
+
+function originFromHost(protocol: string | undefined, host: string | undefined) {
+  const safeProtocol = normalizeProtocol(protocol);
+  if (!safeProtocol || !host || /\s/.test(host)) return undefined;
+
+  try {
+    return new URL(`${safeProtocol}://${host}`).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeOrigin(value: string | null) {
+  if (!value) return undefined;
+
+  try {
+    const origin = new URL(value).origin;
+    return origin === "null" ? undefined : origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function requestOriginCandidates(request: Request) {
+  const requestUrl = new URL(request.url);
+  const candidates = new Set([requestUrl.origin]);
+  const requestProtocol = normalizeProtocol(requestUrl.protocol);
+  const host = firstHeaderValue(request.headers.get("host"));
+  const forwardedHost = firstHeaderValue(request.headers.get("x-forwarded-host"));
+  const forwardedProto =
+    normalizeProtocol(firstHeaderValue(request.headers.get("x-forwarded-proto"))) ??
+    requestProtocol;
+
+  const hostOrigin = originFromHost(requestProtocol, host);
+  if (hostOrigin) candidates.add(hostOrigin);
+
+  const forwardedOrigin = originFromHost(forwardedProto, forwardedHost);
+  if (forwardedOrigin) candidates.add(forwardedOrigin);
+
+  return candidates;
+}
+
 export function isCrossOriginMutation(request: Request) {
-  const origin = request.headers.get("origin");
-  const requestOrigin = new URL(request.url).origin;
-  if (origin && origin !== requestOrigin) {
+  const origin = normalizeOrigin(request.headers.get("origin"));
+  if (request.headers.has("origin") && (!origin || !requestOriginCandidates(request).has(origin))) {
     return true;
   }
 
@@ -101,36 +152,14 @@ export async function readJsonOrText(response: Response) {
 export async function normalizeBackendError(
   response: Response
 ): Promise<NormalizedBackendError> {
-  let message = `Backend request failed with status ${response.status}.`;
-
   try {
-    const payload = await readJsonOrText(response.clone());
-
-    if (typeof payload === "string" && payload.trim().length > 0) {
-      message = payload.trim();
-    } else if (
-      payload &&
-      typeof payload === "object" &&
-      "error" in payload &&
-      typeof payload.error === "string" &&
-      payload.error.trim().length > 0
-    ) {
-      message = payload.error.trim();
-    } else if (
-      payload &&
-      typeof payload === "object" &&
-      "detail" in payload &&
-      typeof payload.detail === "string" &&
-      payload.detail.trim().length > 0
-    ) {
-      message = payload.detail.trim();
-    }
+    await readJsonOrText(response.clone());
   } catch {
-    message = "Backend returned an unreadable error response.";
+    // Client-facing errors stay generic; backend details belong in server logs.
   }
 
   return {
-    error: message,
+    error: CLIENT_REQUEST_FAILED_ERROR,
     status: response.status || 502
   };
 }
@@ -147,7 +176,7 @@ export function parseQaResponse(payload: unknown): QaResponse {
 
 export function backendNotConfiguredError(): NormalizedBackendError {
   return {
-    error: "Backend API URL is not configured.",
+    error: CLIENT_REQUEST_FAILED_ERROR,
     status: 503
   };
 }

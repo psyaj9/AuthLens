@@ -7,6 +7,7 @@ import {
   proxyBackendJson,
   rejectCrossOriginMutation
 } from "@/lib/server/priorauth-proxy";
+import { CLIENT_REQUEST_FAILED_ERROR } from "@/lib/server/backend-proxy";
 
 export async function POST(request: Request) {
   const crossOriginResponse = rejectCrossOriginMutation(request);
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
 
   const payload = await response.json().catch(() => null);
   if (!payload || typeof payload.access_token !== "string") {
-    return errorResponse("Backend returned an unexpected auth response.", 502);
+    return errorResponse(CLIENT_REQUEST_FAILED_ERROR, 502);
   }
 
   const nextResponse = NextResponse.json({ user: payload.user });

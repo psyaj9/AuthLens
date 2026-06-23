@@ -6,6 +6,7 @@ import {
 import {
   backendNotConfiguredError,
   buildBackendUrl,
+  CLIENT_REQUEST_FAILED_ERROR,
   getBackendApiUrl,
   normalizeBackendError
 } from "@/lib/server/backend-proxy";
@@ -46,6 +47,6 @@ export async function GET(request: Request, context: RouteContext) {
       }
     });
   } catch {
-    return errorResponse("AuthLens could not reach the backend.", 502);
+    return errorResponse(CLIENT_REQUEST_FAILED_ERROR, 502);
   }
 }
